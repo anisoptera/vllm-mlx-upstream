@@ -100,9 +100,9 @@ Isolate drums from a rock song using SAM-Audio:
 
 | Audio | Description | Listen |
 |-------|-------------|--------|
-| Original | "Get Ready" by David Fesliyan (30s, royalty-free) | [🎵 rock_get_ready.mp3](../../examples/rock_get_ready.mp3) |
-| Isolated Drums | Drums extracted by SAM-Audio | [🥁 drums_isolated.wav](../../examples/drums_isolated.wav) |
-| Without Drums | Track with drums removed | [🎸 rock_no_drums.wav](../../examples/rock_no_drums.wav) |
+| Original | "Get Ready" by David Fesliyan (30s, royalty-free) | [🎵 rock_get_ready.mp3](https://github.com/waybarrios/vllm-mlx/blob/main/examples/rock_get_ready.mp3?raw=1) |
+| Isolated Drums | Drums extracted by SAM-Audio | [🥁 drums_isolated.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/drums_isolated.wav?raw=1) |
+| Without Drums | Track with drums removed | [🎸 rock_no_drums.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/rock_no_drums.wav?raw=1) |
 
 ```bash
 # Isolate drums from rock song
@@ -321,10 +321,10 @@ Pre-generated voice samples with **native voices** for common business use cases
 
 | Language | Voice | Message | Listen |
 |----------|-------|---------|--------|
-| 🇺🇸 English | af_heart | "Welcome to First National Bank. How may I assist you today?" | [▶️ assistant_bank_en.wav](../../examples/assistant_bank_en.wav) |
-| 🇪🇸 Spanish | ef_dora | "Gracias por llamar a servicio al cliente. Un agente le atenderá pronto." | [▶️ assistant_service_es.wav](../../examples/assistant_service_es.wav) |
-| 🇫🇷 French | ff_siwis | "Bienvenue. Votre appel est important pour nous." | [▶️ assistant_callcenter_fr.wav](../../examples/assistant_callcenter_fr.wav) |
-| 🇨🇳 Chinese | zf_xiaobei | "欢迎致电技术支持中心。我们将竭诚为您服务。" | [▶️ assistant_support_zh.wav](../../examples/assistant_support_zh.wav) |
+| 🇺🇸 English | af_heart | "Welcome to First National Bank. How may I assist you today?" | [▶️ assistant_bank_en.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_bank_en.wav?raw=1) |
+| 🇪🇸 Spanish | ef_dora | "Gracias por llamar a servicio al cliente. Un agente le atenderá pronto." | [▶️ assistant_service_es.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_service_es.wav?raw=1) |
+| 🇫🇷 French | ff_siwis | "Bienvenue. Votre appel est important pour nous." | [▶️ assistant_callcenter_fr.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_callcenter_fr.wav?raw=1) |
+| 🇨🇳 Chinese | zf_xiaobei | "欢迎致电技术支持中心。我们将竭诚为您服务。" | [▶️ assistant_support_zh.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_support_zh.wav?raw=1) |
 
 **Generate your own with native voices:**
 ```bash

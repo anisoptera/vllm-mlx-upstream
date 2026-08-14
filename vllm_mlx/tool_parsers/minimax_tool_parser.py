@@ -24,6 +24,8 @@ from .abstract_tool_parser import (
 
 
 def generate_tool_id() -> str:
+    """Return a short OpenAI-compatible identifier for a parsed tool call."""
+
     return f"call_{uuid.uuid4().hex[:8]}"
 
 
@@ -78,6 +80,8 @@ class MiniMaxToolParser(ToolParser):
     def extract_tool_calls(
         self, model_output: str, request: dict[str, Any] | None = None
     ) -> ExtractedToolCallInformation:
+        """Extract wrapped or bare MiniMax invoke elements from complete output."""
+
         # Try wrapped format first: <minimax:tool_call>...<invoke>...</minimax:tool_call>
         blocks = self.TOOL_CALL_BLOCK.findall(model_output)
         if blocks:
@@ -145,6 +149,8 @@ class MiniMaxToolParser(ToolParser):
         delta_token_ids: Sequence[int] | None = None,
         request: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        """Emit content deltas or a completed MiniMax tool-call delta."""
+
         # Not inside a tool call block yet — pass content through
         if not self._has_tool_start(current_text):
             return {"content": delta_text}

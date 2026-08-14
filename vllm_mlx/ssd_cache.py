@@ -101,6 +101,8 @@ class SSDCacheStats:
     promotion_failures: int = 0
 
     def to_dict(self) -> dict:
+        """Return spill, lookup, reload, and promotion statistics."""
+
         total_lookups = self.ssd_hits + self.ssd_misses
         hit_rate = self.ssd_hits / total_lookups if total_lookups > 0 else 0.0
         avg_latency_ms = (
@@ -477,6 +479,8 @@ class KVCacheSerializer(LayerSerializer):
     _ROTATING_ATTRS = ("max_size", "keep", "step", "_idx")
 
     def snapshot_layer(self, layer: Any) -> dict[str, Any]:
+        """Copy a KV cache layer into NumPy-backed writer-thread data."""
+
         keys_np, keys_orig_dtype = _mx_to_numpy_safe(layer.keys)
         values_np, values_orig_dtype = _mx_to_numpy_safe(layer.values)
 
@@ -513,6 +517,8 @@ class KVCacheSerializer(LayerSerializer):
     def serialize_layer(
         self, snapshot: dict[str, Any], layer_idx: int, file_path: str
     ) -> dict[str, Any]:
+        """Write one KV layer to safetensors and return reconstruction metadata."""
+
         from safetensors.numpy import save_file
 
         tensors = {
@@ -536,6 +542,8 @@ class KVCacheSerializer(LayerSerializer):
         return metadata
 
     def deserialize_layer(self, file_path: str, metadata: dict[str, Any]) -> dict:
+        """Load one KV layer as arrays plus cache reconstruction metadata."""
+
         from safetensors.numpy import load_file
 
         layer_idx = metadata["layer_idx"]
@@ -563,6 +571,8 @@ class ArraysCacheSerializer(LayerSerializer):
     """
 
     def snapshot_layer(self, layer: Any) -> dict[str, Any]:
+        """Copy an arrays-cache state into NumPy-backed writer-thread data."""
+
         state_np: list[np.ndarray] = []
         original_dtypes: list[str | None] = []
         for arr in layer.state:
@@ -579,6 +589,8 @@ class ArraysCacheSerializer(LayerSerializer):
     def serialize_layer(
         self, snapshot: dict[str, Any], layer_idx: int, file_path: str
     ) -> dict[str, Any]:
+        """Write arrays-cache state to safetensors and return its metadata."""
+
         # Writer-thread side: pure numpy + disk.
         from safetensors.numpy import save_file
 
@@ -598,6 +610,8 @@ class ArraysCacheSerializer(LayerSerializer):
         return metadata
 
     def deserialize_layer(self, file_path: str, metadata: dict[str, Any]) -> dict:
+        """Load arrays-cache state and any original dtype hints."""
+
         from safetensors.numpy import load_file
 
         layer_idx = metadata["layer_idx"]

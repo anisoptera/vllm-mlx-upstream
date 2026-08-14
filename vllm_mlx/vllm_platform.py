@@ -133,30 +133,48 @@ class MLXPlatform:
             return [torch.float16, torch.float32]
 
     def is_cuda(self) -> bool:
+        """Return ``False`` because this platform does not use CUDA."""
+
         return False
 
     def is_rocm(self) -> bool:
+        """Return ``False`` because this platform does not use ROCm."""
+
         return False
 
     def is_tpu(self) -> bool:
+        """Return ``False`` because this platform is not a TPU backend."""
+
         return False
 
     def is_xpu(self) -> bool:
+        """Return ``False`` because this platform does not use Intel XPU."""
+
         return False
 
     def is_cpu(self) -> bool:
+        """Return ``False`` because MLX targets Apple GPU acceleration here."""
+
         return False
 
     def is_mlx(self) -> bool:
+        """Return ``True`` to identify the MLX platform plugin."""
+
         return True
 
     def is_out_of_tree(self) -> bool:
+        """Return ``True`` because MLX is registered as a vLLM plugin."""
+
         return True
 
     def is_cuda_alike(self) -> bool:
+        """Return ``False`` because MLX does not implement CUDA semantics."""
+
         return False
 
     def is_sleep_mode_available(self) -> bool:
+        """Return ``False`` because vLLM sleep mode is unavailable on MLX."""
+
         return False
 
     @classmethod

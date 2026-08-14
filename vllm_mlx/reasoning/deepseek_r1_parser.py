@@ -30,10 +30,14 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
 
     @property
     def start_token(self) -> str:
+        """Return the marker that opens an explicit DeepSeek reasoning span."""
+
         return "<think>"
 
     @property
     def end_token(self) -> str:
+        """Return the marker that closes a DeepSeek reasoning span."""
+
         return "</think>"
 
     def extract_reasoning(

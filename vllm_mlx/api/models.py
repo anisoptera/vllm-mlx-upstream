@@ -137,6 +137,8 @@ class ResponseFormatJsonSchema(BaseModel):
     strict: bool | None = False
 
     class Config:
+        """Allow callers to populate the aliased ``schema`` field by name."""
+
         populate_by_name = True
 
 
@@ -227,6 +229,8 @@ class AssistantMessage(BaseModel):
 
     @property
     def reasoning(self) -> str | None:
+        """Return reasoning content through the legacy compatibility alias."""
+
         return self.reasoning_content
 
     @model_serializer
@@ -535,6 +539,8 @@ class ChatCompletionChunkDelta(BaseModel):
 
     @property
     def reasoning(self) -> str | None:
+        """Return incremental reasoning through the compatibility alias."""
+
         return self.reasoning_content
 
     @model_serializer

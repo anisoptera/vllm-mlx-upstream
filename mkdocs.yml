@@ -1,0 +1,400 @@
+site_name: vllm-mlx
+site_description: OpenAI and Anthropic compatible LLM inference on Apple Silicon
+site_url: https://waybarrios.github.io/vllm-mlx/
+repo_url: https://github.com/waybarrios/vllm-mlx
+repo_name: waybarrios/vllm-mlx
+edit_uri: edit/gh-pages/docs/
+copyright: Copyright &copy; vllm-mlx contributors
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Use vllm-mlx:
+      - Server: guides/server.md
+      - Python API: guides/python-api.md
+      - Continuous batching: guides/continuous-batching.md
+      - Model registry: guides/model-registry.md
+      - Multimodal: guides/multimodal.md
+      - Audio: guides/audio.md
+      - Embeddings: guides/embeddings.md
+      - Reasoning: guides/reasoning.md
+      - Tool calling: guides/tool-calling.md
+      - MCP tools: guides/mcp-tools.md
+      - Mixture-of-Experts top-k: guides/moe-top-k.md
+      - Warm prompts: guides/warm-prompts.md
+      - Performance:
+          - Benchmark overview: benchmarks/README.md
+          - Language models: benchmarks/llm.md
+          - Images: benchmarks/image.md
+          - Audio: benchmarks/audio.md
+          - Video: benchmarks/video.md
+  - Learn:
+      - Overview: concepts/index.md
+      - Runtime architecture: concepts/runtime-architecture.md
+      - Request lifecycle: concepts/request-lifecycle.md
+      - Scheduling and batching: concepts/scheduling-and-batching.md
+      - Caching: concepts/caching.md
+      - Models and modalities: concepts/models-and-modalities.md
+      - Parsing and structured output: concepts/parsing-and-structured-output.md
+  - Reference:
+      - Overview: reference/api/index.md
+      - Python symbol index: reference/python-symbols.md
+      - Python modules:
+          - vllm_mlx:
+              - Overview: reference/api/vllm_mlx/index.md
+              - api:
+                  - Overview: reference/api/vllm_mlx/api/index.md
+                  - anthropic_adapter: reference/api/vllm_mlx/api/anthropic_adapter.md
+                  - anthropic_models: reference/api/vllm_mlx/api/anthropic_models.md
+                  - harmony_tools: reference/api/vllm_mlx/api/harmony_tools.md
+                  - models: reference/api/vllm_mlx/api/models.md
+                  - prompt_canonicalize: reference/api/vllm_mlx/api/prompt_canonicalize.md
+                  - responses_models: reference/api/vllm_mlx/api/responses_models.md
+                  - streaming: reference/api/vllm_mlx/api/streaming.md
+                  - tool_calling: reference/api/vllm_mlx/api/tool_calling.md
+                  - utils: reference/api/vllm_mlx/api/utils.md
+              - attention: reference/api/vllm_mlx/attention.md
+              - audio:
+                  - Overview: reference/api/vllm_mlx/audio/index.md
+                  - processor: reference/api/vllm_mlx/audio/processor.md
+                  - stt: reference/api/vllm_mlx/audio/stt.md
+                  - tts: reference/api/vllm_mlx/audio/tts.md
+              - audio_limits: reference/api/vllm_mlx/audio_limits.md
+              - bench_serve: reference/api/vllm_mlx/bench_serve.md
+              - benchmark: reference/api/vllm_mlx/benchmark.md
+              - cli: reference/api/vllm_mlx/cli.md
+              - cli_arg_types: reference/api/vllm_mlx/cli_arg_types.md
+              - constrained:
+                  - Overview: reference/api/vllm_mlx/constrained/index.md
+                  - cache: reference/api/vllm_mlx/constrained/cache.md
+                  - json_schema_processor: reference/api/vllm_mlx/constrained/json_schema_processor.md
+                  - thinking_processor: reference/api/vllm_mlx/constrained/thinking_processor.md
+              - embedding: reference/api/vllm_mlx/embedding.md
+              - endpoint_model_policies: reference/api/vllm_mlx/endpoint_model_policies.md
+              - engine:
+                  - Overview: reference/api/vllm_mlx/engine/index.md
+                  - base: reference/api/vllm_mlx/engine/base.md
+                  - batched: reference/api/vllm_mlx/engine/batched.md
+                  - chat_template_safety: reference/api/vllm_mlx/engine/chat_template_safety.md
+                  - simple: reference/api/vllm_mlx/engine/simple.md
+              - engine_core: reference/api/vllm_mlx/engine_core.md
+              - gradio_app: reference/api/vllm_mlx/gradio_app.md
+              - gradio_text_app: reference/api/vllm_mlx/gradio_text_app.md
+              - lifecycle: reference/api/vllm_mlx/lifecycle.md
+              - mcp:
+                  - Overview: reference/api/vllm_mlx/mcp/index.md
+                  - client: reference/api/vllm_mlx/mcp/client.md
+                  - config: reference/api/vllm_mlx/mcp/config.md
+                  - executor: reference/api/vllm_mlx/mcp/executor.md
+                  - manager: reference/api/vllm_mlx/mcp/manager.md
+                  - security: reference/api/vllm_mlx/mcp/security.md
+                  - tools: reference/api/vllm_mlx/mcp/tools.md
+                  - types: reference/api/vllm_mlx/mcp/types.md
+              - memory_cache: reference/api/vllm_mlx/memory_cache.md
+              - metrics: reference/api/vllm_mlx/metrics.md
+              - mllm_batch_generator: reference/api/vllm_mlx/mllm_batch_generator.md
+              - mllm_cache: reference/api/vllm_mlx/mllm_cache.md
+              - mllm_scheduler: reference/api/vllm_mlx/mllm_scheduler.md
+              - mlx_streams: reference/api/vllm_mlx/mlx_streams.md
+              - model_registry: reference/api/vllm_mlx/model_registry.md
+              - model_runner: reference/api/vllm_mlx/model_runner.md
+              - model_workflow: reference/api/vllm_mlx/model_workflow.md
+              - models:
+                  - Overview: reference/api/vllm_mlx/models/index.md
+                  - llm: reference/api/vllm_mlx/models/llm.md
+                  - mllm: reference/api/vllm_mlx/models/mllm.md
+              - multimodal_processor: reference/api/vllm_mlx/multimodal_processor.md
+              - optimizations: reference/api/vllm_mlx/optimizations.md
+              - output_collector: reference/api/vllm_mlx/output_collector.md
+              - paged_cache: reference/api/vllm_mlx/paged_cache.md
+              - patches:
+                  - Overview: reference/api/vllm_mlx/patches/index.md
+                  - gemma4_mllm: reference/api/vllm_mlx/patches/gemma4_mllm.md
+                  - glm4v_moe_mllm: reference/api/vllm_mlx/patches/glm4v_moe_mllm.md
+                  - qwen3_5_mllm: reference/api/vllm_mlx/patches/qwen3_5_mllm.md
+                  - qwen3_5_mtp: reference/api/vllm_mlx/patches/qwen3_5_mtp.md
+                  - qwen3_next_mtp: reference/api/vllm_mlx/patches/qwen3_next_mtp.md
+              - plugin: reference/api/vllm_mlx/plugin.md
+              - prefix_cache: reference/api/vllm_mlx/prefix_cache.md
+              - prompt_warmup: reference/api/vllm_mlx/prompt_warmup.md
+              - reasoning:
+                  - Overview: reference/api/vllm_mlx/reasoning/index.md
+                  - base: reference/api/vllm_mlx/reasoning/base.md
+                  - deepseek_r1_parser: reference/api/vllm_mlx/reasoning/deepseek_r1_parser.md
+                  - gemma4_parser: reference/api/vllm_mlx/reasoning/gemma4_parser.md
+                  - glm4_parser: reference/api/vllm_mlx/reasoning/glm4_parser.md
+                  - gpt_oss_parser: reference/api/vllm_mlx/reasoning/gpt_oss_parser.md
+                  - harmony_parser: reference/api/vllm_mlx/reasoning/harmony_parser.md
+                  - mistral_parser: reference/api/vllm_mlx/reasoning/mistral_parser.md
+                  - poolside_v1_parser: reference/api/vllm_mlx/reasoning/poolside_v1_parser.md
+                  - qwen3_parser: reference/api/vllm_mlx/reasoning/qwen3_parser.md
+                  - think_parser: reference/api/vllm_mlx/reasoning/think_parser.md
+              - request: reference/api/vllm_mlx/request.md
+              - rerank: reference/api/vllm_mlx/rerank.md
+              - rerank_forward: reference/api/vllm_mlx/rerank_forward.md
+              - scheduler: reference/api/vllm_mlx/scheduler.md
+              - server: reference/api/vllm_mlx/server.md
+              - specprefill: reference/api/vllm_mlx/specprefill.md
+              - ssd_cache: reference/api/vllm_mlx/ssd_cache.md
+              - text_model_from_vlm: reference/api/vllm_mlx/text_model_from_vlm.md
+              - tool_parsers:
+                  - Overview: reference/api/vllm_mlx/tool_parsers/index.md
+                  - abstract_tool_parser: reference/api/vllm_mlx/tool_parsers/abstract_tool_parser.md
+                  - auto_tool_parser: reference/api/vllm_mlx/tool_parsers/auto_tool_parser.md
+                  - deepseek_tool_parser: reference/api/vllm_mlx/tool_parsers/deepseek_tool_parser.md
+                  - functionary_tool_parser: reference/api/vllm_mlx/tool_parsers/functionary_tool_parser.md
+                  - gemma4_tool_parser: reference/api/vllm_mlx/tool_parsers/gemma4_tool_parser.md
+                  - glm47_tool_parser: reference/api/vllm_mlx/tool_parsers/glm47_tool_parser.md
+                  - granite_tool_parser: reference/api/vllm_mlx/tool_parsers/granite_tool_parser.md
+                  - harmony_tool_parser: reference/api/vllm_mlx/tool_parsers/harmony_tool_parser.md
+                  - hermes_tool_parser: reference/api/vllm_mlx/tool_parsers/hermes_tool_parser.md
+                  - kimi_tool_parser: reference/api/vllm_mlx/tool_parsers/kimi_tool_parser.md
+                  - llama_tool_parser: reference/api/vllm_mlx/tool_parsers/llama_tool_parser.md
+                  - minimax_tool_parser: reference/api/vllm_mlx/tool_parsers/minimax_tool_parser.md
+                  - mistral_tool_parser: reference/api/vllm_mlx/tool_parsers/mistral_tool_parser.md
+                  - nemotron_tool_parser: reference/api/vllm_mlx/tool_parsers/nemotron_tool_parser.md
+                  - poolside_v1_tool_parser: reference/api/vllm_mlx/tool_parsers/poolside_v1_tool_parser.md
+                  - qwen3_xml_tool_parser: reference/api/vllm_mlx/tool_parsers/qwen3_xml_tool_parser.md
+                  - qwen_tool_parser: reference/api/vllm_mlx/tool_parsers/qwen_tool_parser.md
+                  - xlam_tool_parser: reference/api/vllm_mlx/tool_parsers/xlam_tool_parser.md
+              - utils:
+                  - Overview: reference/api/vllm_mlx/utils/index.md
+                  - chat_templates: reference/api/vllm_mlx/utils/chat_templates.md
+                  - download: reference/api/vllm_mlx/utils/download.md
+                  - harmony_render: reference/api/vllm_mlx/utils/harmony_render.md
+                  - mamba_cache: reference/api/vllm_mlx/utils/mamba_cache.md
+                  - tokenizer: reference/api/vllm_mlx/utils/tokenizer.md
+                  - truncation: reference/api/vllm_mlx/utils/truncation.md
+              - vision_embedding_cache: reference/api/vllm_mlx/vision_embedding_cache.md
+              - vllm_platform: reference/api/vllm_mlx/vllm_platform.md
+              - worker: reference/api/vllm_mlx/worker.md
+      - HTTP API: reference/http-api.md
+      - CLI: reference/cli.md
+      - All CLI options: reference/cli-options.md
+      - Configuration: reference/configuration.md
+      - Supported models: reference/models.md
+      - Complete source inventory: reference/source/index.md
+  - Contribute:
+      - Architecture: development/architecture.md
+      - Codebase map: development/codebase-map.md
+      - Agent guide: development/agent-guide.md
+      - Documentation system: development/documentation.md
+      - Contributing: development/contributing.md
+
+theme:
+  name: material
+  language: en
+  font:
+    text: IBM Plex Sans
+    code: IBM Plex Mono
+  icon:
+    logo: material/server-network
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.action.edit
+    - content.code.annotate
+    - content.code.copy
+    - navigation.footer
+    - navigation.indexes
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: false
+      languages:
+        - locale: en
+          name: English
+          default: true
+          build: true
+        - locale: es
+          name: Español
+          build: true
+          site_description: Inferencia de LLM compatible con OpenAI y Anthropic en Apple Silicon
+          nav:
+            - Inicio: index.md
+            - Primeros pasos:
+                - Instalación: getting-started/installation.md
+                - Inicio rápido: getting-started/quickstart.md
+            - Usar vllm-mlx:
+                - Servidor: guides/server.md
+                - API de Python: guides/python-api.md
+                - Lotes continuos: guides/continuous-batching.md
+                - Multimodal: guides/multimodal.md
+                - Audio: guides/audio.md
+                - Embeddings: guides/embeddings.md
+                - Razonamiento: guides/reasoning.md
+                - Llamadas a herramientas: guides/tool-calling.md
+                - Herramientas MCP: guides/mcp-tools.md
+                - Top-k de MoE: guides/moe-top-k.md
+                - Prompts calientes: guides/warm-prompts.md
+                - Rendimiento:
+                    - Resumen: benchmarks/README.md
+                    - Modelos de lenguaje: benchmarks/llm.md
+                    - Imágenes: benchmarks/image.md
+                    - Audio: benchmarks/audio.md
+                    - Video: benchmarks/video.md
+            - Referencia:
+                - CLI: reference/cli.md
+                - Configuración: reference/configuration.md
+                - Modelos compatibles: reference/models.md
+        - locale: fr
+          name: Français
+          build: true
+          site_description: Inférence LLM compatible avec OpenAI et Anthropic sur Apple Silicon
+          nav:
+            - Accueil: index.md
+            - Bien démarrer:
+                - Installation: getting-started/installation.md
+                - Démarrage rapide: getting-started/quickstart.md
+            - Utiliser vllm-mlx:
+                - Serveur: guides/server.md
+                - API Python: guides/python-api.md
+                - Traitement continu: guides/continuous-batching.md
+                - Multimodal: guides/multimodal.md
+                - Audio: guides/audio.md
+                - Embeddings: guides/embeddings.md
+                - Raisonnement: guides/reasoning.md
+                - Appel d'outils: guides/tool-calling.md
+                - Outils MCP: guides/mcp-tools.md
+                - Top-k MoE: guides/moe-top-k.md
+                - Prompts préchargés: guides/warm-prompts.md
+                - Performances:
+                    - Vue d'ensemble: benchmarks/README.md
+                    - Modèles de langage: benchmarks/llm.md
+                    - Images: benchmarks/image.md
+                    - Audio: benchmarks/audio.md
+                    - Vidéo: benchmarks/video.md
+            - Référence:
+                - CLI: reference/cli.md
+                - Configuration: reference/configuration.md
+                - Modèles pris en charge: reference/models.md
+        - locale: zh
+          name: 中文
+          build: true
+          site_description: 在 Apple Silicon 上兼容 OpenAI 和 Anthropic 的 LLM 推理
+          nav:
+            - 首页: index.md
+            - 入门:
+                - 安装: getting-started/installation.md
+                - 快速开始: getting-started/quickstart.md
+            - 使用 vllm-mlx:
+                - 服务器: guides/server.md
+                - Python API: guides/python-api.md
+                - 连续批处理: guides/continuous-batching.md
+                - 多模态: guides/multimodal.md
+                - 音频: guides/audio.md
+                - 嵌入: guides/embeddings.md
+                - 推理: guides/reasoning.md
+                - 工具调用: guides/tool-calling.md
+                - MCP 工具: guides/mcp-tools.md
+                - MoE top-k: guides/moe-top-k.md
+                - 预热提示: guides/warm-prompts.md
+                - 性能:
+                    - 概览: benchmarks/README.md
+                    - 语言模型: benchmarks/llm.md
+                    - 图像: benchmarks/image.md
+                    - 音频: benchmarks/audio.md
+                    - 视频: benchmarks/video.md
+            - 参考:
+                - CLI: reference/cli.md
+                - 配置: reference/configuration.md
+                - 支持的模型: reference/models.md
+  - search:
+      lang:
+        - en
+        - es
+        - fr
+        - zh
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - .
+          options:
+            allow_inspection: false
+            docstring_options:
+              warn_missing_types: false
+            docstring_section_style: list
+            filters: []
+            heading_level: 2
+            merge_init_into_class: true
+            members_order: source
+            separate_signature: true
+            show_bases: true
+            show_if_no_docstring: true
+            show_object_full_path: true
+            show_root_full_path: true
+            show_root_heading: true
+            show_signature_annotations: true
+            show_source: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+
+hooks:
+  - scripts/mkdocs_hooks.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/accessibility.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/waybarrios/vllm-mlx
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/vllm-mlx/
+
+strict: true

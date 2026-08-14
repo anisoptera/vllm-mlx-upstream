@@ -1997,6 +1997,8 @@ def _validate_sql_identifier(identifier: str, *, kind: str) -> None:
 
 
 def write_sqlite(results: list[BenchServeResult], output_path: str) -> None:
+    """Append prompt-sweep benchmark results to a SQLite database."""
+
     rows = [_result_to_dict(r) for r in results]
     _write_sqlite_rows(
         output_path,
@@ -2118,6 +2120,8 @@ def _workload_record_to_row(record: dict) -> dict:
 
 
 def format_workload_table(payload: dict) -> str:
+    """Format workload result records as a compact human-readable table."""
+
     rows = []
     for record in payload.get("results") or []:
         row = _workload_record_to_row(record)
@@ -2131,10 +2135,14 @@ def format_workload_table(payload: dict) -> str:
 
 
 def format_workload_json(payload: dict) -> str:
+    """Serialize a workload result payload as indented JSON."""
+
     return json.dumps(payload, indent=2)
 
 
 def format_workload_csv(payload: dict) -> str:
+    """Serialize workload result records with the stable CSV column contract."""
+
     buf = io.StringIO()
     writer = csv_mod.DictWriter(buf, fieldnames=WORKLOAD_RESULT_COLUMNS)
     writer.writeheader()
@@ -2160,6 +2168,8 @@ _WORKLOAD_SQL_SCHEMA = (
 
 
 def format_workload_sql(payload: dict) -> str:
+    """Render SQL statements that create and populate the workload table."""
+
     lines = [
         f"CREATE TABLE IF NOT EXISTS bench_serve_workload ({_WORKLOAD_SQL_SCHEMA});",
     ]
@@ -2171,6 +2181,8 @@ def format_workload_sql(payload: dict) -> str:
 
 
 def write_workload_sqlite(payload: dict, output_path: str) -> None:
+    """Append workload result records to a SQLite database."""
+
     rows = [_workload_record_to_row(record) for record in payload.get("results") or []]
     _write_sqlite_rows(
         output_path,
@@ -2182,6 +2194,12 @@ def write_workload_sqlite(payload: dict, output_path: str) -> None:
 
 
 def format_workload_payload(payload: dict, fmt: str = "json") -> str:
+    """Serialize a workload payload in the requested text output format.
+
+    Raises:
+        ValueError: If ``fmt`` is not ``json``, ``csv``, ``sql``, or ``table``.
+    """
+
     if fmt == "json":
         return format_workload_json(payload)
     if fmt == "csv":

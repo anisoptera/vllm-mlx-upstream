@@ -10,7 +10,7 @@ This script:
 5. Updates config.json with num_nextn_predict_layers=1
 
 Usage:
-    python add_mtp_weights.py [--mlx-model-path PATH] [--source-model MODEL]
+    ``python add_mtp_weights.py [--mlx-model-path PATH] [--source-model MODEL]``
 
 Requirements:
     pip install mlx

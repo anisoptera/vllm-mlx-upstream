@@ -15,9 +15,14 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 class AsyncReadableUpload(Protocol):
+    """Structural type for an asynchronously readable uploaded file."""
+
     filename: str | None
 
-    async def read(self, size: int = -1) -> bytes: ...
+    async def read(self, size: int = -1) -> bytes:
+        """Read at most ``size`` bytes, or all remaining bytes when negative."""
+
+        ...
 
 
 async def save_upload_with_limit(

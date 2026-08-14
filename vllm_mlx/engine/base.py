@@ -136,6 +136,8 @@ class BaseEngine(ABC):
 
     @preserve_native_tool_format.setter
     def preserve_native_tool_format(self, value: bool) -> None:
+        """Enable or disable preservation of model-native tool messages."""
+
         self._preserve_native_tool_format = value
 
     def prepare_for_start(self) -> None:

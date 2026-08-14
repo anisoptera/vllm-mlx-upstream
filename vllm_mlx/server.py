@@ -1048,6 +1048,8 @@ class RequestModelContext:
     lease: ModelLease | None = None
 
     async def release(self) -> None:
+        """Release the registry lease once, if this context owns one."""
+
         if self.lease is not None:
             lease = self.lease
             self.lease = None

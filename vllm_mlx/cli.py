@@ -2110,6 +2110,8 @@ build_parser = create_parser
 
 
 def main():
+    """Parse the command line and dispatch to the selected vllm-mlx command."""
+
     parser = create_parser()
     args = parser.parse_args()
 

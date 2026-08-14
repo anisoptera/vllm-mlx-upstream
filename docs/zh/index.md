@@ -52,8 +52,8 @@ vllm-mlx 通过集成以下组件，为 vLLM 带来原生 Apple Silicon GPU 加�
 - [音频基准测试](benchmarks/audio.md)
 
 ### 开发者文档
-- [架构设计](../development/architecture.md)
-- [贡献指南](../development/contributing.md)
+- [架构设计（英文）](/vllm-mlx/development/architecture/)
+- [贡献指南（英文）](/vllm-mlx/development/contributing/)
 
 ## 环境要求
 
@@ -63,4 +63,4 @@ vllm-mlx 通过集成以下组件，为 vLLM 带来原生 Apple Silicon GPU 加�
 
 ## 许可证
 
-Apache 2.0，详情请参阅 [LICENSE](../../LICENSE)。
+Apache 2.0。请参阅[仓库许可证](https://github.com/waybarrios/vllm-mlx/blob/main/LICENSE)。

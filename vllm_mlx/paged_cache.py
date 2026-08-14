@@ -402,6 +402,8 @@ class BlockHashToBlockMap:
         return len(self._cache)
 
     def clear(self) -> None:
+        """Remove every block-hash mapping without mutating the blocks."""
+
         self._cache.clear()
 
 

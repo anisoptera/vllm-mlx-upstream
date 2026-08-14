@@ -216,6 +216,8 @@ class ModelLease:
     release_cb: Callable[[], Awaitable[None]]
 
     async def release(self) -> None:
+        """Release this lease once and allow the model to become evictable."""
+
         if self.manager is None:
             return
         manager = self.manager
@@ -642,6 +644,8 @@ class ModelManager:
 
     @property
     def memory_budget_bytes(self) -> int:
+        """Return the registry's configured resident-model memory budget."""
+
         return self._config.memory_budget_bytes
 
     @property
@@ -650,6 +654,8 @@ class ModelManager:
         return sorted(self._registry.keys())
 
     def has_model(self, model_name: str) -> bool:
+        """Return whether a model name is present in the serving registry."""
+
         return model_name in self._registry
 
     def list_models(self) -> list[dict[str, Any]]:

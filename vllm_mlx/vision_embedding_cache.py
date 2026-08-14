@@ -39,15 +39,21 @@ class VisionCacheStats:
 
     @property
     def pixel_hit_rate(self) -> float:
+        """Return successful pixel-cache lookups divided by all pixel lookups."""
+
         total = self.pixel_cache_hits + self.pixel_cache_misses
         return self.pixel_cache_hits / total if total > 0 else 0.0
 
     @property
     def encoding_hit_rate(self) -> float:
+        """Return successful encoding lookups divided by all encoding lookups."""
+
         total = self.encoding_cache_hits + self.encoding_cache_misses
         return self.encoding_cache_hits / total if total > 0 else 0.0
 
     def to_dict(self) -> dict:
+        """Return pixel, encoding, timing, and image counters."""
+
         return {
             "pixel_cache_hits": self.pixel_cache_hits,
             "pixel_cache_misses": self.pixel_cache_misses,

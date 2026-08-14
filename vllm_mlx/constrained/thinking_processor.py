@@ -130,10 +130,14 @@ class ThinkingAwareLogitsProcessor:
 
     @property
     def state(self) -> Phase:
+        """Return the current reasoning lifecycle phase."""
+
         return self._state
 
     @property
     def thinking_tokens(self) -> int:
+        """Return the number of generated tokens counted as reasoning."""
+
         return self._thinking_tokens
 
     @property

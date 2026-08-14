@@ -52,8 +52,8 @@ vllm-mlx incorpora aceleración GPU nativa de Apple Silicon a vLLM mediante la i
 - [Benchmarks de audio](benchmarks/audio.md)
 
 ### Desarrollo
-- [Arquitectura](../development/architecture.md)
-- [Contribuir](../development/contributing.md)
+- [Arquitectura (en inglés)](/vllm-mlx/development/architecture/)
+- [Contribuir (en inglés)](/vllm-mlx/development/contributing/)
 
 ## Requisitos
 
@@ -63,4 +63,4 @@ vllm-mlx incorpora aceleración GPU nativa de Apple Silicon a vLLM mediante la i
 
 ## Licencia
 
-Apache 2.0 - Consulta [LICENSE](../../LICENSE) para más detalles.
+Apache 2.0. Consulta la [licencia del repositorio](https://github.com/waybarrios/vllm-mlx/blob/main/LICENSE).

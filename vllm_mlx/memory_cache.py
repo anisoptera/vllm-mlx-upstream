@@ -239,16 +239,22 @@ class CacheStats:
 
     @property
     def hit_rate(self) -> float:
+        """Return successful lookups divided by all completed lookups."""
+
         total = self.hits + self.misses
         return self.hits / total if total > 0 else 0.0
 
     @property
     def memory_utilization(self) -> float:
+        """Return the fraction of the configured memory budget in use."""
+
         if self.max_memory_bytes == 0:
             return 0.0
         return self.current_memory_bytes / self.max_memory_bytes
 
     def to_dict(self) -> dict[str, Any]:
+        """Return rounded cache counters and memory values for APIs and logs."""
+
         return {
             "hits": self.hits,
             "misses": self.misses,

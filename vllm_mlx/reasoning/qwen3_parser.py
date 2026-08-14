@@ -34,10 +34,14 @@ class Qwen3ReasoningParser(BaseThinkingReasoningParser):
 
     @property
     def start_token(self) -> str:
+        """Return the Qwen3 reasoning opening marker."""
+
         return "<think>"
 
     @property
     def end_token(self) -> str:
+        """Return the Qwen3 reasoning closing marker."""
+
         return "</think>"
 
     def extract_reasoning(

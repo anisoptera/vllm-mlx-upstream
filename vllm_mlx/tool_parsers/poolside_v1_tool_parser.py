@@ -47,6 +47,8 @@ class PoolsideV1ToolParser(Glm47ToolParser):
         self.reset()
 
     def reset(self) -> None:
+        """Reset Laguna parser buffers and per-call argument state."""
+
         super().reset()
         self._buffer = ""
         self._in_tool_call = False
@@ -96,6 +98,8 @@ class PoolsideV1ToolParser(Glm47ToolParser):
     def extract_tool_calls(
         self, model_output: str, request: dict[str, Any] | None = None
     ) -> ExtractedToolCallInformation:
+        """Extract complete Laguna tool blocks and preserve remaining content."""
+
         cleaned_text = self.strip_think_tags(model_output)
         valid_names = self._get_tool_names(request)
         tool_calls: list[dict[str, Any]] = []
@@ -333,6 +337,8 @@ class PoolsideV1ToolParser(Glm47ToolParser):
         delta_token_ids: Sequence[int] | None = None,
         request: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        """Incrementally emit Laguna content and schema-aware tool arguments."""
+
         del previous_text, current_text, previous_token_ids, current_token_ids
         del delta_token_ids
         self._buffer += delta_text

@@ -406,17 +406,23 @@ class MLLMBatchStats:
 
     @property
     def prompt_tps(self) -> float:
+        """Return measured multimodal prompt throughput in tokens per second."""
+
         if self.prompt_time == 0:
             return 0
         return self.prompt_tokens / self.prompt_time
 
     @property
     def generation_tps(self) -> float:
+        """Return measured decode throughput in tokens per second."""
+
         if self.generation_time == 0:
             return 0
         return self.generation_tokens / self.generation_time
 
     def to_dict(self) -> Dict[str, Any]:
+        """Return token, timing, vision, and peak-memory statistics."""
+
         return {
             "prompt_tokens": self.prompt_tokens,
             "prompt_time": self.prompt_time,

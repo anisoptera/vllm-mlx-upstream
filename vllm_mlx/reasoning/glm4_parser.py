@@ -48,16 +48,22 @@ class Glm4ReasoningParser(BaseThinkingReasoningParser):
 
     @property
     def start_token(self) -> str:
+        """Return the marker that opens a GLM reasoning span."""
+
         return "<think>"
 
     @property
     def end_token(self) -> str:
+        """Return the marker that closes a GLM reasoning span."""
+
         return "</think>"
 
     def extract_reasoning(
         self,
         model_output: str,
     ) -> tuple[str | None, str | None]:
+        """Strip GLM box markers and split complete reasoning from content."""
+
         cleaned = model_output.replace(_BOX_START, "").replace(_BOX_END, "")
         return super().extract_reasoning(cleaned)
 

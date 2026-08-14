@@ -1,67 +1,86 @@
-# vLLM-MLX Documentation
+# vllm-mlx documentation
 
-**Apple Silicon MLX Backend for vLLM** - GPU-accelerated Text, Image, Video & Audio on Mac
+<div class="vllm-hero" markdown>
 
-## What is vLLM-MLX?
+## OpenAI and Anthropic compatible inference on Apple Silicon
 
-vllm-mlx brings native Apple Silicon GPU acceleration to vLLM by integrating:
+Serve text, image, video, audio, embeddings, and reranking from one local process. vllm-mlx combines continuous batching, efficient KV caches, tool calling, structured output, and model residency with native MLX acceleration.
 
-- **[MLX](https://github.com/ml-explore/mlx)**: Apple's ML framework with unified memory and Metal kernels
-- **[mlx-lm](https://github.com/ml-explore/mlx-lm)**: Optimized LLM inference with KV cache and quantization
-- **[mlx-vlm](https://github.com/Blaizzy/mlx-vlm)**: Vision-language models for multimodal inference
-- **[mlx-audio](https://github.com/Blaizzy/mlx-audio)**: Text-to-Speech and Speech-to-Text with native voices
-- **[mlx-embeddings](https://github.com/Blaizzy/mlx-embeddings)**: Text embeddings for semantic search and RAG
+```bash
+pip install vllm-mlx
+vllm-mlx serve \
+  mlx-community/Llama-3.2-3B-Instruct-4bit \
+  --port 8000
+```
 
-## Key Features
+[Get started](getting-started/quickstart.md){ .md-button .md-button--primary }
+[Browse the Python API](reference/api/index.md){ .md-button }
 
-- **Multimodal** - Text, Image, Video & Audio in one platform
-- **Native GPU acceleration** on Apple Silicon (M1, M2, M3, M4, M5)
-- **Native TTS voices** - Spanish, French, Chinese, Japanese + 5 more languages
-- **OpenAI API compatible** - drop-in replacement for OpenAI client
-- **Embeddings** - OpenAI-compatible `/v1/embeddings` endpoint
-- **MCP Tool Calling** - integrate external tools via Model Context Protocol
-- **Paged KV Cache** - memory-efficient caching with prefix sharing
-- **Continuous Batching** - high throughput for multiple concurrent users
+</div>
 
-## Quick Links
+## Start here
 
-### Getting Started
-- [Installation](getting-started/installation.md)
-- [Quick Start](getting-started/quickstart.md)
+<div class="grid cards" markdown>
 
-### User Guides
-- [OpenAI-Compatible Server](guides/server.md)
-- [Python API](guides/python-api.md)
-- [Multimodal (Images & Video)](guides/multimodal.md)
-- [Audio (STT/TTS)](guides/audio.md)
-- [Embeddings](guides/embeddings.md)
-- [Reasoning Models](guides/reasoning.md)
-- [Tool Calling](guides/tool-calling.md)
-- [MCP & Tool Calling](guides/mcp-tools.md)
-- [Continuous Batching](guides/continuous-batching.md)
-- [Multi-Model Serving](guides/model-registry.md)
+-   **Install and serve**
 
-### Reference
-- [CLI Commands](reference/cli.md)
-- [Supported Models](reference/models.md)
-- [Configuration](reference/configuration.md)
+    Set up the supported environment and start your first local model.
 
-### Benchmarks
-- [LLM Benchmarks](benchmarks/llm.md)
-- [Image Benchmarks](benchmarks/image.md)
-- [Video Benchmarks](benchmarks/video.md)
-- [Audio Benchmarks](benchmarks/audio.md)
+    [Installation](getting-started/installation.md) · [Quickstart](getting-started/quickstart.md)
 
-### Development
-- [Architecture](development/architecture.md)
-- [Contributing](development/contributing.md)
+-   **Connect a client**
+
+    Use OpenAI, Anthropic, Responses, audio, embedding, reranking, or MCP routes.
+
+    [Server guide](guides/server.md) · [HTTP API](reference/http-api.md)
+
+-   **Use the Python API**
+
+    Integrate generation directly and inspect exact runtime interfaces.
+
+    [Python guide](guides/python-api.md) · [API reference](reference/api/index.md)
+
+-   **Understand the runtime**
+
+    Follow requests through scheduling, batching, caches, parsers, and model execution.
+
+    [Core concepts](concepts/index.md) · [Architecture](concepts/runtime-architecture.md)
+
+-   **Find exact source behavior**
+
+    Search every module, class, function, method, CLI option, and source range.
+
+    [Source inventory](reference/source/index.md) · [CLI options](reference/cli-options.md)
+
+-   **Work with LLMs and agents**
+
+    Load compact, full-corpus, or JSON documentation designed for machine context.
+
+    [`llms.txt`](llms.txt) · [Agent guide](development/agent-guide.md)
+
+</div>
+
+## What you can run
+
+- **Language models:** text generation, reasoning, structured output, and tool calling
+- **Multimodal models:** image and video understanding
+- **Audio models:** speech-to-text and text-to-speech
+- **Embedding models:** OpenAI-compatible vector generation
+- **Rerankers:** query-document relevance scoring
+- **Model registries:** multiple resident or dynamically loaded models
+
+## Core runtime capabilities
+
+- Continuous batching and paged KV cache management
+- Prefix reuse, prompt warmup, and optional SSD cache support
+- OpenAI, Anthropic, Responses, audio, reranking, and MCP protocols
+- Reasoning parsers, tool parsers, constrained decoding, and JSON schemas
+- Metrics, health checks, cancellation, lifecycle control, and model residency
 
 ## Requirements
 
-- macOS on Apple Silicon (M1/M2/M3/M4/M5)
-- Python 3.10+
-- 8GB+ RAM recommended
+- macOS on Apple Silicon
+- Python 3.10 or newer
+- At least 8 GB of unified memory
 
-## License
-
-Apache 2.0 - See [LICENSE](../LICENSE) for details.
+See the [installation guide](getting-started/installation.md) for supported dependency and environment details.

@@ -233,33 +233,45 @@ class ResponsesEventBase(BaseModel):
 
 
 class ResponseCreatedEvent(ResponsesEventBase):
+    """Signal that a response object has been created."""
+
     type: Literal["response.created"] = "response.created"
     response: ResponseObject
 
 
 class ResponseInProgressEvent(ResponsesEventBase):
+    """Signal that response generation is in progress."""
+
     type: Literal["response.in_progress"] = "response.in_progress"
     response: ResponseObject
 
 
 class ResponseCompletedEvent(ResponsesEventBase):
+    """Carry the terminal completed response object."""
+
     type: Literal["response.completed"] = "response.completed"
     response: ResponseObject
 
 
 class ResponseOutputItemAddedEvent(ResponsesEventBase):
+    """Announce a newly added response output item."""
+
     type: Literal["response.output_item.added"] = "response.output_item.added"
     output_index: int
     item: ResponseMessageItem | ResponseReasoningItem | ResponseFunctionCallItem
 
 
 class ResponseOutputItemDoneEvent(ResponsesEventBase):
+    """Signal that a response output item is complete."""
+
     type: Literal["response.output_item.done"] = "response.output_item.done"
     output_index: int
     item: ResponseMessageItem | ResponseReasoningItem | ResponseFunctionCallItem
 
 
 class ResponseContentPartAddedEvent(ResponsesEventBase):
+    """Announce a content part attached to an output item."""
+
     type: Literal["response.content_part.added"] = "response.content_part.added"
     item_id: str
     output_index: int
@@ -268,6 +280,8 @@ class ResponseContentPartAddedEvent(ResponsesEventBase):
 
 
 class ResponseContentPartDoneEvent(ResponsesEventBase):
+    """Signal that an output item's content part is complete."""
+
     type: Literal["response.content_part.done"] = "response.content_part.done"
     item_id: str
     output_index: int
@@ -276,6 +290,8 @@ class ResponseContentPartDoneEvent(ResponsesEventBase):
 
 
 class ResponseOutputTextDeltaEvent(ResponsesEventBase):
+    """Carry an incremental final-answer text fragment."""
+
     type: Literal["response.output_text.delta"] = "response.output_text.delta"
     item_id: str
     output_index: int
@@ -285,6 +301,8 @@ class ResponseOutputTextDeltaEvent(ResponsesEventBase):
 
 
 class ResponseOutputTextDoneEvent(ResponsesEventBase):
+    """Carry the complete final-answer text for one content part."""
+
     type: Literal["response.output_text.done"] = "response.output_text.done"
     item_id: str
     output_index: int
@@ -294,6 +312,8 @@ class ResponseOutputTextDoneEvent(ResponsesEventBase):
 
 
 class ResponseReasoningTextDeltaEvent(ResponsesEventBase):
+    """Carry an incremental reasoning text fragment."""
+
     type: Literal["response.reasoning_text.delta"] = "response.reasoning_text.delta"
     item_id: str
     output_index: int
@@ -302,6 +322,8 @@ class ResponseReasoningTextDeltaEvent(ResponsesEventBase):
 
 
 class ResponseReasoningTextDoneEvent(ResponsesEventBase):
+    """Carry the complete reasoning text for one content part."""
+
     type: Literal["response.reasoning_text.done"] = "response.reasoning_text.done"
     item_id: str
     output_index: int
@@ -310,6 +332,8 @@ class ResponseReasoningTextDoneEvent(ResponsesEventBase):
 
 
 class ResponseFunctionCallArgumentsDeltaEvent(ResponsesEventBase):
+    """Carry an incremental fragment of function-call arguments."""
+
     type: Literal["response.function_call_arguments.delta"] = (
         "response.function_call_arguments.delta"
     )

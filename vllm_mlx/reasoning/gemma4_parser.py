@@ -113,10 +113,14 @@ class Gemma4ReasoningParser(BaseThinkingReasoningParser):
 
     @property
     def start_token(self) -> str:
+        """Return Gemma's marker for entering the thought channel."""
+
         return "<|channel>"
 
     @property
     def end_token(self) -> str:
+        """Return Gemma's marker for entering the response channel."""
+
         return "<channel|>"
 
     def __init__(self, tokenizer=None):
@@ -129,6 +133,8 @@ class Gemma4ReasoningParser(BaseThinkingReasoningParser):
         self._content_seen: bool = False
 
     def reset_state(self):
+        """Reset base parsing state and buffered Gemma channel markers."""
+
         super().reset_state()
         self._pending = ""
         self._content_seen = False

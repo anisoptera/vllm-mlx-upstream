@@ -100,9 +100,9 @@ python examples/audio_separation_example.py song.mp3 --description music -o musi
 
 | 音频 | 说明 | 收听 |
 |-------|-------------|--------|
-| 原始音频 | David Fesliyan 的"Get Ready"（30 秒，免版权） | [rock_get_ready.mp3](../../../examples/rock_get_ready.mp3) |
-| 分离鼓声 | SAM-Audio 提取的鼓声 | [drums_isolated.wav](../../../examples/drums_isolated.wav) |
-| 去除鼓声 | 移除鼓声后的音轨 | [rock_no_drums.wav](../../../examples/rock_no_drums.wav) |
+| 原始音频 | David Fesliyan 的"Get Ready"（30 秒，免版权） | [rock_get_ready.mp3](https://github.com/waybarrios/vllm-mlx/blob/main/examples/rock_get_ready.mp3?raw=1) |
+| 分离鼓声 | SAM-Audio 提取的鼓声 | [drums_isolated.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/drums_isolated.wav?raw=1) |
+| 去除鼓声 | 移除鼓声后的音轨 | [rock_no_drums.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/rock_no_drums.wav?raw=1) |
 
 ```bash
 # 从摇滚歌曲中分离鼓声
@@ -321,10 +321,10 @@ python examples/tts_multilingual.py --list-languages
 
 | 语言 | 声音 | 内容 | 收听 |
 |----------|-------|---------|--------|
-| 英语 | af_heart | "Welcome to First National Bank. How may I assist you today?" | [assistant_bank_en.wav](../../../examples/assistant_bank_en.wav) |
-| 西班牙语 | ef_dora | "Gracias por llamar a servicio al cliente. Un agente le atenderá pronto." | [assistant_service_es.wav](../../../examples/assistant_service_es.wav) |
-| 法语 | ff_siwis | "Bienvenue. Votre appel est important pour nous." | [assistant_callcenter_fr.wav](../../../examples/assistant_callcenter_fr.wav) |
-| 中文 | zf_xiaobei | "欢迎致电技术支持中心。我们将竭诚为您服务。" | [assistant_support_zh.wav](../../../examples/assistant_support_zh.wav) |
+| 英语 | af_heart | "Welcome to First National Bank. How may I assist you today?" | [assistant_bank_en.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_bank_en.wav?raw=1) |
+| 西班牙语 | ef_dora | "Gracias por llamar a servicio al cliente. Un agente le atenderá pronto." | [assistant_service_es.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_service_es.wav?raw=1) |
+| 法语 | ff_siwis | "Bienvenue. Votre appel est important pour nous." | [assistant_callcenter_fr.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_callcenter_fr.wav?raw=1) |
+| 中文 | zf_xiaobei | "欢迎致电技术支持中心。我们将竭诚为您服务。" | [assistant_support_zh.wav](https://github.com/waybarrios/vllm-mlx/blob/main/examples/assistant_support_zh.wav?raw=1) |
 
 **使用原生声音自行生成：**
 ```bash

@@ -913,8 +913,12 @@ class JSONSchemaLogitsProcessor:
 
     @property
     def schema(self) -> dict | None:
+        """Return the normalized JSON Schema enforced for this request."""
+
         return self._schema
 
     @property
     def vocab_size(self) -> int:
+        """Return the tokenizer vocabulary size used to construct masks."""
+
         return self._vocab_size

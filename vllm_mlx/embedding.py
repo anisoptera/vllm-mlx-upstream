@@ -32,6 +32,8 @@ class EmbeddingEngine:
 
     @property
     def is_loaded(self) -> bool:
+        """Return whether the embedding model has been loaded."""
+
         return self._model is not None
 
     def load(self) -> None:

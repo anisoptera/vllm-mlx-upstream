@@ -48,6 +48,8 @@ class InferenceTracker:
     _ttft_observed: bool = False
 
     def observe_ttft(self) -> None:
+        """Record time to first token once for this inference request."""
+
         if self.collector is None or self._ttft_observed:
             return
         self.collector.observe_ttft(
@@ -64,6 +66,8 @@ class InferenceTracker:
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
     ) -> None:
+        """Record terminal latency and token counts once for this request."""
+
         if self.collector is None or self._finished:
             return
         self.collector.observe_inference(
@@ -87,9 +91,13 @@ class MetricsCollector:
 
     @property
     def enabled(self) -> bool:
+        """Return whether metric collection is enabled."""
+
         return self._enabled
 
     def configure(self, *, enabled: bool) -> None:
+        """Enable or disable collection and lazily initialize Prometheus state."""
+
         with self._lock:
             self._enabled = enabled
             if not enabled or self._prom is not None:
@@ -283,11 +291,15 @@ class MetricsCollector:
         }
 
     def track_inference(self, endpoint: str, *, stream: bool) -> InferenceTracker:
+        """Create request-scoped inference timing state for an endpoint."""
+
         if not self._enabled:
             return InferenceTracker(None, endpoint, stream)
         return InferenceTracker(self, endpoint, stream)
 
     def observe_http_start(self, *, method: str, path: str) -> None:
+        """Increment the in-flight request gauge for a normalized route."""
+
         if not self._enabled or self._prom is None:
             return
         self._prom["http_requests_in_flight"].labels(method=method, path=path).inc()
@@ -300,6 +312,8 @@ class MetricsCollector:
         status_code: int,
         duration: float,
     ) -> None:
+        """Record an HTTP result and decrement its in-flight gauge."""
+
         if not self._enabled or self._prom is None:
             return
         self._prom["http_requests_in_flight"].labels(method=method, path=path).dec()
@@ -323,6 +337,8 @@ class MetricsCollector:
         prompt_tokens: int,
         completion_tokens: int,
     ) -> None:
+        """Record one terminal inference outcome, latency, and token totals."""
+
         if not self._enabled or self._prom is None:
             return
         stream_label = _bool_str(stream)
@@ -347,6 +363,8 @@ class MetricsCollector:
             ).inc(completion_tokens)
 
     def observe_ttft(self, *, endpoint: str, stream: bool, value: float) -> None:
+        """Observe time to first token for a streaming or buffered request."""
+
         if not self._enabled or self._prom is None:
             return
         self._prom["inference_ttft_seconds"].labels(
@@ -494,6 +512,12 @@ class MetricsCollector:
         engine: Any | None,
         mcp_manager: Any | None,
     ) -> tuple[bytes, str]:
+        """Refresh runtime gauges and render Prometheus exposition bytes.
+
+        Raises:
+            RuntimeError: If metrics are disabled.
+        """
+
         if not self._enabled:
             raise RuntimeError("metrics_disabled")
         if self._prom is None:

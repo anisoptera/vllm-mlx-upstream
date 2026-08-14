@@ -1,0 +1,54 @@
+# vllm-mlx
+
+> vllm-mlx is an OpenAI and Anthropic compatible inference server for Apple Silicon. It provides continuous batching, multimodal generation, tool calling, structured output, and several KV-cache strategies on top of MLX.
+
+Canonical documentation: https://waybarrios.github.io/vllm-mlx/
+
+The documentation site publishes human-readable pages, Markdown mirrors, a complete single-file corpus, and a line-precise JSON inventory of every tracked Python module, class, function, method, and nested helper.
+
+## Start here
+
+- [Documentation home](https://waybarrios.github.io/vllm-mlx/index.md): Project overview, requirements, and navigation.
+- [Installation](https://waybarrios.github.io/vllm-mlx/getting-started/installation.md): Supported environment and installation choices.
+- [Quick start](https://waybarrios.github.io/vllm-mlx/getting-started/quickstart.md): Start a server and make the first request.
+- [Runtime architecture](https://waybarrios.github.io/vllm-mlx/concepts/runtime-architecture.md): Components, engine modes, and ownership boundaries.
+- [Request lifecycle](https://waybarrios.github.io/vllm-mlx/concepts/request-lifecycle.md): Request validation, scheduling, generation, streaming, and cleanup.
+
+## User guides
+
+- [Server guide](https://waybarrios.github.io/vllm-mlx/guides/server.md): OpenAI and Anthropic compatible serving.
+- [Python API](https://waybarrios.github.io/vllm-mlx/guides/python-api.md): Direct engine and model usage.
+- [Multimodal](https://waybarrios.github.io/vllm-mlx/guides/multimodal.md): Image and video requests.
+- [Audio](https://waybarrios.github.io/vllm-mlx/guides/audio.md): Speech-to-text and text-to-speech.
+- [Embeddings](https://waybarrios.github.io/vllm-mlx/guides/embeddings.md): Embedding model setup and API usage.
+- [Reasoning](https://waybarrios.github.io/vllm-mlx/guides/reasoning.md): Reasoning parsers and thinking controls.
+- [Tool calling](https://waybarrios.github.io/vllm-mlx/guides/tool-calling.md): Parser selection and tool-call formats.
+- [MCP tools](https://waybarrios.github.io/vllm-mlx/guides/mcp-tools.md): Tool discovery, execution, and security controls.
+- [Continuous batching](https://waybarrios.github.io/vllm-mlx/guides/continuous-batching.md): Concurrent inference configuration.
+- [Multi-model serving](https://waybarrios.github.io/vllm-mlx/guides/model-registry.md): Registry-backed loading and memory budgets.
+
+## Reference
+
+- [HTTP API](https://waybarrios.github.io/vllm-mlx/reference/http-api.md): Endpoint catalog and protocol behavior.
+- [CLI](https://waybarrios.github.io/vllm-mlx/reference/cli.md): Commands and options.
+- [Complete CLI option inventory](https://waybarrios.github.io/vllm-mlx/reference/cli-options.md): Every argparse declaration with defaults, choices, help, and source links.
+- [CLI JSON inventory](https://waybarrios.github.io/vllm-mlx/cli-inventory.json): Structured command-line option metadata.
+- [Configuration](https://waybarrios.github.io/vllm-mlx/reference/configuration.md): Server, cache, batching, and request settings.
+- [Supported models](https://waybarrios.github.io/vllm-mlx/reference/models.md): Model families and selection guidance.
+- [Python API index](https://waybarrios.github.io/vllm-mlx/reference/api/index.md): Generated module reference and source maps.
+- [JSON API inventory](https://waybarrios.github.io/vllm-mlx/api-inventory.json): Structured symbols, signatures, docstrings, and `#Lx-Ly` source URLs.
+- [Repository source inventory](https://waybarrios.github.io/vllm-mlx/source-inventory.json): Runtime package, maintenance scripts, and runnable examples in one structured source map.
+- [Complete documentation corpus](https://waybarrios.github.io/vllm-mlx/llms-full.txt): All documentation and all Python symbols in one Markdown document.
+
+## Maintainers and coding agents
+
+- [Codebase map](https://waybarrios.github.io/vllm-mlx/development/codebase-map.md): Ownership and responsibilities by module group.
+- [Agent guide](https://waybarrios.github.io/vllm-mlx/development/agent-guide.md): Efficient reading order, invariants, tests, and change workflows.
+- [Documentation guide](https://waybarrios.github.io/vllm-mlx/development/documentation.md): Build, coverage, and publishing rules.
+- [Contributing](https://waybarrios.github.io/vllm-mlx/development/contributing.md): Development and pull request workflow.
+
+## Languages
+
+- [Español](https://waybarrios.github.io/vllm-mlx/es/index.md): Spanish documentation.
+- [Français](https://waybarrios.github.io/vllm-mlx/fr/index.md): French documentation.
+- [中文](https://waybarrios.github.io/vllm-mlx/zh/index.md): Chinese documentation.

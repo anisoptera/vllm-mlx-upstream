@@ -97,6 +97,8 @@ class MLLMPrefixCacheEntry:
 
     @property
     def total_tokens(self) -> int:
+        """Return the number of token IDs represented by this cache entry."""
+
         return len(self.token_ids)
 
     @property

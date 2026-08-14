@@ -38,10 +38,14 @@ class MistralReasoningParser(BaseThinkingReasoningParser):
 
     @property
     def start_token(self) -> str:
+        """Return the Mistral reasoning opening marker."""
+
         return "[THINK]"
 
     @property
     def end_token(self) -> str:
+        """Return the Mistral reasoning closing marker."""
+
         return "[/THINK]"
 
     def extract_reasoning(

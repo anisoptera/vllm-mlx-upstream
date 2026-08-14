@@ -3,12 +3,12 @@
 Mistral tool call parser for vllm-mlx.
 
 Handles Mistral's tool calling format:
-- Format: [TOOL_CALLS] [{"name": "func", "arguments": {...}}]
-- Or newer: [TOOL_CALLS]func_name{"arg": "value"}
+- Format: ``[TOOL_CALLS] [{"name": "func", "arguments": {...}}]``
+- Or newer: ``[TOOL_CALLS]func_name{"arg": "value"}``
 - Or newest (Ministral 3, Devstral Small 2, Dec 2025 tokenizers):
-  [TOOL_CALLS]func_name[ARGS]{"arg": "value"}
+  ``[TOOL_CALLS]func_name[ARGS]{"arg": "value"}``
   Confirmed directly in these models' chat_template.jinja:
-  {{- '[TOOL_CALLS]' + tool['function']['name'] + '[ARGS]' + arguments }}
+  ``{{- '[TOOL_CALLS]' + tool['function']['name'] + '[ARGS]' + arguments }}``
 
 Used with models like Mistral-7B-Instruct, Devstral, Ministral 3, etc.
 """
@@ -51,8 +51,8 @@ class MistralToolParser(ToolParser):
     Tool call parser for Mistral models.
 
     Supports both old and new Mistral tool call formats:
-    - Old (< v11): [TOOL_CALLS] [{"name": "add", "arguments": {"a": 1, "b": 2}}]
-    - New (>= v11): [TOOL_CALLS]add{"a": 1, "b": 2}
+    - Old (< v11): ``[TOOL_CALLS] [{"name": "add", "arguments": {"a": 1, "b": 2}}]``
+    - New (>= v11): ``[TOOL_CALLS]add{"a": 1, "b": 2}``
 
     Used when --enable-auto-tool-choice --tool-call-parser mistral are set.
     """
@@ -90,6 +90,8 @@ class MistralToolParser(ToolParser):
         self._tool_call_id_emitted: bool = False
 
     def reset(self) -> None:
+        """Reset shared and Mistral-specific streaming tool-call state."""
+
         super().reset()
         self._args_started = False
         self._args_in_string = False

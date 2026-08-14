@@ -13,6 +13,12 @@ cd vllm-mlx
 pip install -e ".[dev]"
 ```
 
+For documentation work, also install the documentation extra:
+
+```bash
+pip install -r docs/requirements.txt
+```
+
 ## Development Workflow
 
 ### Running Tests
@@ -40,6 +46,15 @@ black --check vllm_mlx/ tests/
 # Type-check relevant changes
 mypy vllm_mlx/ --ignore-missing-imports --no-error-summary
 ```
+
+### Documentation checks
+
+```bash
+python scripts/check_docs_coverage.py
+mkdocs build --strict
+```
+
+Every public module, class, function, and method must have a docstring. The API reference and line-precise source maps are generated automatically from tracked Python files. See [Documentation Development](documentation.md).
 
 ### Running Benchmarks
 
@@ -74,7 +89,7 @@ vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
 
 ## Code Structure
 
-See [Architecture](architecture.md) for details on the codebase structure.
+See [Architecture](architecture.md) for the runtime overview and the [Codebase Map](codebase-map.md) for module ownership.
 
 ## Testing on Different Hardware
 

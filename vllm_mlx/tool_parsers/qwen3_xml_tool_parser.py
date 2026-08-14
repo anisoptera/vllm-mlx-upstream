@@ -52,12 +52,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DeltaFunctionCall:
+    """Incremental function name and argument payload used by the XML parser."""
+
     name: Optional[str] = None
     arguments: str = ""
 
 
 @dataclass
 class DeltaToolCall:
+    """Incremental indexed tool call produced by the XML parser shim."""
+
     index: int = 0
     id: Optional[str] = None
     type: str = "function"
@@ -66,6 +70,8 @@ class DeltaToolCall:
 
 @dataclass
 class DeltaMessage:
+    """Incremental content, reasoning, and tool calls from the parser shim."""
+
     content: Optional[str] = None
     tool_calls: Optional[list[DeltaToolCall]] = None
     role: Optional[str] = None

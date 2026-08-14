@@ -220,23 +220,35 @@ class MLXWorker:
 
     # LoRA methods (not yet supported on MLX)
     def add_lora(self, lora_request) -> bool:
+        """Report that dynamically adding a LoRA adapter is unsupported."""
+
         logger.warning("LoRA not yet supported on MLX backend")
         return False
 
     def remove_lora(self, lora_id: int) -> bool:
+        """Report that dynamically removing a LoRA adapter is unsupported."""
+
         return False
 
     def pin_lora(self, lora_id: int) -> bool:
+        """Report that pinning a LoRA adapter is unsupported."""
+
         return False
 
     def list_loras(self) -> set[int]:
+        """Return the empty set because runtime LoRA adapters are unsupported."""
+
         return set()
 
     # Sleep mode (not applicable for MLX)
     def sleep(self, level: int = 1) -> None:
+        """Leave the worker active because MLX unified memory has no sleep mode."""
+
         logger.debug("Sleep mode not applicable for MLX (unified memory)")
 
     def wake_up(self, tags: list[str] | None = None) -> None:
+        """Perform no work because the MLX worker never enters sleep mode."""
+
         logger.debug("Wake up not applicable for MLX (unified memory)")
 
     @property

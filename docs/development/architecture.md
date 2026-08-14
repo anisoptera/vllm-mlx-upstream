@@ -1,208 +1,109 @@
 # Architecture
 
-## System Overview
+vllm-mlx is a layered inference server for Apple Silicon. Protocol code is separated from model execution, concurrent scheduling, caching, model ownership, and model-specific compatibility patches.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                     vLLM API Layer                        │
-│  (OpenAI-compatible: chat, completions, embeddings,      │
-│   audio, tools, MCP, reasoning)                          │
-└──────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│                      MLXPlatform                          │
-│       (vLLM platform plugin for Apple Silicon)           │
-└──────────────────────────────────────────────────────────┘
-                           │
-       ┌──────────┬────────┴────────┬──────────┐
-       ▼          ▼                 ▼          ▼
-┌───────────┐┌───────────┐┌─────────────┐┌──────────────┐
-│  mlx-lm   ││  mlx-vlm  ││  mlx-audio  ││mlx-embeddings│
-│  (LLM)    ││  (Vision) ││  (STT/TTS)  ││ (Embeddings) │
-└───────────┘└───────────┘└─────────────┘└──────────────┘
-       │          │                 │          │
-       └──────────┴────────┬────────┴──────────┘
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│                         MLX                               │
-│          (Apple ML Framework - Metal kernels)            │
-└──────────────────────────────────────────────────────────┘
+## System overview
+
+```text
+OpenAI and Anthropic clients
+            |
+      FastAPI server
+            |
+  protocol normalization
+            |
+       BaseEngine
+       /        \
+SimpleEngine  BatchedEngine
+                   |
+             AsyncEngineCore
+                   |
+               Scheduler
+                   |
+        model wrappers and caches
+                   |
+ mlx-lm | mlx-vlm | mlx-audio | mlx-embeddings
+                   |
+              MLX / Metal
 ```
 
-## Engine Architecture
+## Primary layers
 
-### Simple Engine
-- Direct mlx-lm/mlx-vlm wrapper
-- Maximum throughput for single user
-- Zero batching overhead
+### API layer
 
-### Batched Engine
-- AsyncEngineCore with continuous batching
-- Multiple concurrent requests
-- Scheduler with priority queue
+[`server.py`](../reference/api/vllm_mlx/server.md) owns the FastAPI process, route handlers, authentication, rate limits, endpoint policy, model acquisition, streaming protocol output, and shutdown integration. Pydantic requests, responses, and protocol adapters live in [`api/`](../reference/api/vllm_mlx/api/index.md).
 
-## Paged KV Cache Architecture
+### Engine layer
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      PagedCacheManager                          │
-├─────────────────────────────────────────────────────────────────┤
-│  FreeKVCacheBlockQueue     │  BlockHashToBlockMap               │
-│  (O(1) doubly linked list) │  (hash → block for prefix caching) │
-│  ┌───┐ ┌───┐ ┌───┐ ┌───┐  │  {hash_0: block_5}                 │
-│  │ 3 │↔│ 7 │↔│ 2 │↔│ 9 │  │  {hash_1: block_12}                │
-│  └───┘ └───┘ └───┘ └───┘  │  {hash_2: block_5}  (shared!)      │
-│   LRU ───────────▶ MRU    │                                     │
-├─────────────────────────────────────────────────────────────────┤
-│  CacheBlock[0..N]:                                              │
-│  - block_id, ref_count, block_hash                              │
-│  - prev_free_block, next_free_block (doubly linked)             │
-│  - cache_data: List[(keys, values)] per layer                   │
-└─────────────────────────────────────────────────────────────────┘
-```
+[`BaseEngine`](../reference/api/vllm_mlx/engine/base.md) is the common contract used by the server. [`SimpleEngine`](../reference/api/vllm_mlx/engine/simple.md) calls model wrappers directly. [`BatchedEngine`](../reference/api/vllm_mlx/engine/batched.md) delegates concurrent work to [`AsyncEngineCore`](../reference/api/vllm_mlx/engine_core.md).
 
-### Cache Flow
+### Scheduler layer
 
-```
-Request Completion                    Cache Storage
-       │                                    │
-       ▼                                    ▼
-┌──────────────────┐              ┌─────────────────────┐
-│ response.cache() │ ───────────▶ │ Extract .state      │
-│ (KVCache objects)│              │ (keys, values)      │
-└──────────────────┘              └─────────────────────┘
-                                            │
-                                            ▼
-                                  ┌─────────────────────┐
-                                  │ Slice into 64-token │
-                                  │ blocks + chain hash │
-                                  └─────────────────────┘
-                                            │
-       New Request                          ▼
-       │                          ┌─────────────────────┐
-       ▼                          │ BlockHashToBlockMap │
-┌──────────────────┐              │ deduplicate & share │
-│ compute_block_   │ ◀─────────── └─────────────────────┘
-│ hash(parent, tok)│
-└──────────────────┘
-       │
-       ▼
-┌──────────────────┐
-│ Reconstruct via  │
-│ mx.concatenate() │
-│ + KVCache.from_  │
-│ state()          │
-└──────────────────┘
-```
+[`Scheduler`](../reference/api/vllm_mlx/scheduler.md) manages waiting and running requests, mlx-lm `BatchGenerator` state, prefill and decode steps, cache attachment, cancellation, recovery, and terminal outputs. The engine core routes scheduler results into per-request output collectors.
 
-## Key Features
+Multimodal batching uses separate scheduler, batch generator, processor, and cache components because vision inputs and cache shapes differ from text-only inference.
 
-| Feature | Benefit |
-|---------|---------|
-| **1.14x Speedup** | Faster inference by reusing cached KV computations |
-| **80% Memory Savings** | Share system prompt blocks across concurrent users |
-| **vLLM Architecture** | FreeKVCacheBlockQueue, BlockHashToBlockMap, chain hashing |
-| **Real Tensor Storage** | Extracts actual KV data using `.state` |
-| **Block Deduplication** | Hash-based detection prevents duplicate storage |
-| **Copy-on-Write (COW)** | Shared blocks only copied when modified |
-| **O(1) LRU Eviction** | Doubly linked list for efficient cleanup |
+### Model layer
 
-## Module Structure
+Text generation uses [`MLXLanguageModel`](../reference/api/vllm_mlx/models/llm.md). Vision-language generation uses [`MLXMultimodalLM`](../reference/api/vllm_mlx/models/mllm.md). Embedding, reranking, STT, and TTS engines remain separate optional services with endpoint-specific compatibility policy.
 
-```
-vllm_mlx/
-├── api/
-│   ├── models.py         # Pydantic models
-│   ├── utils.py          # Shared utilities
-│   ├── streaming.py      # Streaming JSON encoder
-│   └── tool_calling.py   # Tool call parsing
-├── audio/
-│   ├── processor.py      # Audio preprocessing
-│   ├── stt.py            # Speech-to-Text
-│   └── tts.py            # Text-to-Speech
-├── engine/
-│   ├── base.py           # BaseEngine ABC
-│   ├── simple.py         # SimpleEngine
-│   └── batched.py        # BatchedEngine
-├── mcp/
-│   ├── client.py         # MCP client
-│   ├── config.py         # Config loading
-│   ├── executor.py       # Tool execution
-│   ├── security.py       # Command validation
-│   ├── tools.py          # Tool sandbox
-│   └── manager.py        # Server management
-├── models/
-│   ├── llm.py            # MLXLanguageModel
-│   └── mllm.py           # MLXMultimodalLM
-├── tool_parsers/         # Tool call parsers (12 formats)
-├── reasoning_parsers/    # Reasoning parsers (qwen3, deepseek_r1)
-├── server.py             # FastAPI server
-├── engine_core.py        # AsyncEngineCore
-├── scheduler.py          # LLM request scheduler
-├── mllm_scheduler.py     # MLLM request scheduler
-├── mllm_batch_generator.py # MLLM batch generation
-├── paged_cache.py        # Paged KV cache
-├── prefix_cache.py       # Prefix cache manager
-├── output_collector.py   # Request output collector
-├── model_registry.py     # Model detection & registry
-└── cli.py                # CLI commands
-```
+### Cache layer
 
-## Request Flow
+The scheduler can use legacy prefix entries, memory-aware entries, block-aware prefix reuse, or paged KV blocks, with optional SSD persistence. Multimodal and vision-embedding caches cover different preprocessing state. See [Caching](../concepts/caching.md) for invariants and selection guidance.
 
-1. **API Request** → FastAPI endpoint (auth, rate limit)
-2. **Engine Selection** → Simple or Batched based on config
-3. **Template Application** → Chat template formatting (with tool definitions if enabled)
-4. **Generation** → mlx-lm, mlx-vlm, mlx-audio, or mlx-embeddings
-5. **Post-processing** → Tool call parsing, reasoning extraction
-6. **Streaming** → SSE response chunks
-7. **Caching** → KV cache storage for reuse
+### Parser and constraint layer
 
-## Residency Lifecycle Scope
+Reasoning parsers separate hidden thinking from final content. Tool parsers convert model-family syntax into protocol tool calls. Constrained processors enforce JSON Schema and reasoning-budget transitions at the logits level. See [Parsing and Structured Output](../concepts/parsing-and-structured-output.md).
 
-The current residency work is scoped around safe automatic unload and reload of the
-main model when residency policy decides it should be evicted, including future
-memory-pressure-based eviction. It is not intended to turn `load_model()` into a
-general hot-reconfiguration API for a running FastAPI server.
+### Model ownership layer
 
-### Residency Invariants
+[`ModelManager`](../reference/api/vllm_mlx/model_registry.md) provides registry-backed multi-model loading, memory budgets, eviction, and request leases. [`ResidencyManager`](../reference/api/vllm_mlx/lifecycle.md) provides lazy loading and idle unload for the default model.
 
-- Any resident engine swap must invalidate cached tool parser instances. Tool
-  parsers can retain tokenizer-derived state, so `_tool_parser_instance` must not
-  survive an unload/reload boundary.
-- Residency unload/reload correctness takes priority over in-process
-  reconfiguration. Once FastAPI lifespan startup has run, changing the main model
-  or residency policy should be treated as a process restart concern unless the
-  server explicitly adds and tests live reconfiguration support.
+## Request flow
 
-### Known Limitation
+1. Middleware authenticates, meters, and validates transport policy.
+2. The endpoint validates the request model and protocol schema.
+3. Protocol input is normalized into a prompt or internal message list.
+4. The server builds sampling, reasoning, tool, and structured-output state.
+5. The request acquires its model or resident engine.
+6. The simple engine executes directly, or the batched engine submits to the scheduler.
+7. Deltas pass through reasoning and tool parsers before protocol encoding.
+8. Terminal reason and usage are emitted even when the final textual delta was suppressed.
+9. Completion, error, timeout, cancellation, and disconnect paths release request and model state.
 
-- `/v1/messages/count_tokens` currently depends on the active engine tokenizer and
-  may wake the main model even when lazy residency is enabled. In other words,
-  lazy load defers the first generation-capable request, not necessarily every
-  request that touches the model.
-- Upstream `served_model_name` support has not yet been integrated with
-  residency. After rebasing, we still need an explicit follow-up to decide how
-  user-facing model identity should interact with resident specs, `/health`,
-  `/v1/status`, `/v1/models`, and cache-dir keying for local model paths.
-- Eager startup hardening in this branch is currently scoped to cancellation
-  safety. Ordinary non-cancellation startup failures in `SimpleEngine.start()`
-  and `BatchedEngine.start()` still need a separate follow-up if we want to
-  guarantee teardown of partially prepared state before surfacing the original
-  startup error.
+See [Request Lifecycle](../concepts/request-lifecycle.md) for the complete path.
 
-## Hardware Detection
+## Concurrency invariants
 
-vllm-mlx auto-detects Apple Silicon:
-- Chip name (M1, M2, M3, M4, M5)
-- Total memory
-- Neural engine cores
-- GPU cores
+- MLX generation streams are thread-local. Scheduler steps stay on one bound worker thread.
+- One model cannot be owned by incompatible active engines unless ownership is transferred through the registry contract.
+- A request-scoped model lease prevents eviction during generation.
+- Request collectors receive one terminal result.
+- Streaming cleanup runs in `finally` paths because clients can disconnect between yields.
 
-```python
-from vllm_mlx.hardware import get_hardware_info
+## Cache invariants
 
-hw = get_hardware_info()
-print(f"{hw.chip_name} ({hw.total_memory_gb:.0f} GB)")
-```
+- Cache identity includes model compatibility, not only token equality.
+- Expired entries cannot satisfy exact or partial prefix lookups.
+- Memory accounting changes once for each inserted or removed entry.
+- Paged block reference counts agree with block-table ownership and free-list membership.
+- Non-trimmable layers are never shortened to manufacture a prefix hit.
+- Timers, threads, executors, and disk resources have explicit shutdown paths.
+
+## Extension points
+
+| Extension | Primary location | Required validation |
+| --- | --- | --- |
+| New HTTP field or event | `api/` and `server.py` | Protocol model and server tests |
+| New tool format | `tool_parsers/` | Complete, streaming, split-marker, and server tests |
+| New reasoning format | `reasoning/` | Complete, streaming, finalization, and server tests |
+| New model family | model detection, wrapper, optional patch | Loader, dispatch, generation, and cache tests |
+| New cache policy | cache module and scheduler | Hit, miss, eviction, concurrency, reset, and recovery tests |
+| New endpoint model | engine plus endpoint policy | Compatibility, lazy load, limit, and error tests |
+
+## Further reading
+
+- [Runtime Architecture](../concepts/runtime-architecture.md)
+- [Scheduling and Batching](../concepts/scheduling-and-batching.md)
+- [Models and Modalities](../concepts/models-and-modalities.md)
+- [Codebase Map](codebase-map.md)
+- [Complete Python API](../reference/api/index.md)
