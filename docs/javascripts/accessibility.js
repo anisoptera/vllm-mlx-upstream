@@ -33,7 +33,7 @@
     unavailable: "Translation unavailable; opens the language homepage",
     home: "home",
   };
-  const sitePrefix = "/vllm-mlx/";
+  const sitePrefix = "/";
 
   const languageForPath = (path) => {
     const relative = path.startsWith(sitePrefix)

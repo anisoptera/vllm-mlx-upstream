@@ -137,10 +137,10 @@ def convert(value: int, *, strict: bool = True) -> str:
     )
     assert 'href="../api/vllm_mlx/sample/#contract-vllm_mlx.sample.convert"' in index
     assert urljoin(
-        "https://waybarrios.github.io/vllm-mlx/reference/python-symbols/",
+        "https://vllm-mlx.is-a.dev/reference/python-symbols/",
         "../api/vllm_mlx/sample/#contract-vllm_mlx.sample.convert",
     ) == (
-        "https://waybarrios.github.io/vllm-mlx/reference/api/vllm_mlx/sample/"
+        "https://vllm-mlx.is-a.dev/reference/api/vllm_mlx/sample/"
         "#contract-vllm_mlx.sample.convert"
     )
     assert "#L3-L5" in index

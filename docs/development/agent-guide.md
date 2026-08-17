@@ -7,13 +7,13 @@ This page is a stable entry point for tools that need to understand or modify vl
 1. Read [`/llms.txt`](../llms.txt) for the documentation map.
 2. Read the relevant concept or user guide.
 3. Find the owning module in the [codebase map](codebase-map.md).
-4. Query [`/api-inventory.json`](https://waybarrios.github.io/vllm-mlx/api-inventory.json) for exact symbols, signatures, docstrings, visibility, and source lines.
+4. Query [`/api-inventory.json`](https://vllm-mlx.is-a.dev/api-inventory.json) for exact symbols, signatures, docstrings, visibility, and source lines.
 5. Open the generated module page for inline source and related members.
 6. Read the nearest tests before proposing a change.
 
-Use [`/llms-full.txt`](https://waybarrios.github.io/vllm-mlx/llms-full.txt) only when a large context window can hold the complete corpus.
+Use [`/llms-full.txt`](https://vllm-mlx.is-a.dev/llms-full.txt) only when a large context window can hold the complete corpus.
 
-Use [`/source-inventory.json`](https://waybarrios.github.io/vllm-mlx/source-inventory.json) when work also touches maintenance scripts or runnable examples.
+Use [`/source-inventory.json`](https://vllm-mlx.is-a.dev/source-inventory.json) when work also touches maintenance scripts or runnable examples.
 
 ## Machine-readable API inventory
 

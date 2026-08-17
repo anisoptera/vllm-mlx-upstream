@@ -17,7 +17,7 @@ python scripts/check_docs_coverage.py
 mkdocs serve
 ```
 
-Open `http://127.0.0.1:8000/vllm-mlx/`. Checked-in API pages are refreshed with `python scripts/gen_api_reference.py`.
+Open `http://127.0.0.1:8000/`. Checked-in API pages are refreshed with `python scripts/gen_api_reference.py`.
 
 ## Run the release-equivalent build
 

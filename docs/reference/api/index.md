@@ -19,9 +19,9 @@ Private implementation objects are included because this reference also serves m
 ## Machine-readable forms
 
 - [`/llms.txt`](../../llms.txt) is the compact documentation index.
-- [`/llms-full.txt`](https://waybarrios.github.io/vllm-mlx/llms-full.txt) contains all hand-written pages and every symbol record in one Markdown file.
-- [`/api-inventory.json`](https://waybarrios.github.io/vllm-mlx/api-inventory.json) contains module paths, symbols, kinds, signatures, docstrings, visibility, addressability, and exact source URLs.
-- [`/source-inventory.json`](https://waybarrios.github.io/vllm-mlx/source-inventory.json) adds maintenance scripts and runnable examples to the runtime inventory.
+- [`/llms-full.txt`](https://vllm-mlx.is-a.dev/llms-full.txt) contains all hand-written pages and every symbol record in one Markdown file.
+- [`/api-inventory.json`](https://vllm-mlx.is-a.dev/api-inventory.json) contains module paths, symbols, kinds, signatures, docstrings, visibility, addressability, and exact source URLs.
+- [`/source-inventory.json`](https://vllm-mlx.is-a.dev/source-inventory.json) adds maintenance scripts and runnable examples to the runtime inventory.
 
 Maintenance scripts and examples also have [generated source-reference pages](../source/index.md).
 
@@ -34,7 +34,7 @@ Use [Python symbol index](../python-symbols.md) when you know a class, function,
 Generated Markdown mirrors are also available at predictable paths. For example:
 
 ```text
-https://waybarrios.github.io/vllm-mlx/reference/api/vllm_mlx/server.md
-https://waybarrios.github.io/vllm-mlx/reference/api/vllm_mlx/scheduler.md
-https://waybarrios.github.io/vllm-mlx/reference/api/vllm_mlx/tool_parsers/qwen_tool_parser.md
+https://vllm-mlx.is-a.dev/reference/api/vllm_mlx/server.md
+https://vllm-mlx.is-a.dev/reference/api/vllm_mlx/scheduler.md
+https://vllm-mlx.is-a.dev/reference/api/vllm_mlx/tool_parsers/qwen_tool_parser.md
 ```

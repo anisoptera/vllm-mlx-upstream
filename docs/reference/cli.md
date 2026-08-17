@@ -1,6 +1,6 @@
 # CLI Reference
 
-This guide explains the supported vllm-mlx command workflows. The [complete generated option inventory](cli-options.md) lists every argparse declaration across runtime commands, maintenance scripts, and runnable examples with defaults, choices, help text, and exact `#Lx-Ly` source links. Agents can also consume [`cli-inventory.json`](https://waybarrios.github.io/vllm-mlx/cli-inventory.json).
+This guide explains the supported vllm-mlx command workflows. The [complete generated option inventory](cli-options.md) lists every argparse declaration across runtime commands, maintenance scripts, and runnable examples with defaults, choices, help text, and exact `#Lx-Ly` source links. Agents can also consume [`cli-inventory.json`](https://vllm-mlx.is-a.dev/cli-inventory.json).
 
 ## Commands Overview
 

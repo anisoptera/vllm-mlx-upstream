@@ -10,6 +10,6 @@ Every page contains:
 - Conservative implementation facts generated from calls, state access, return expressions, direct raises, decorators, awaits, and yields.
 - Inline static source rendering.
 
-The machine-readable [`source-inventory.json`](https://waybarrios.github.io/vllm-mlx/source-inventory.json) combines this section with the complete runtime package. Tests are intentionally excluded from public source reference pages because they document verification scenarios rather than supported runtime or user-facing programs.
+The machine-readable [`source-inventory.json`](https://vllm-mlx.is-a.dev/source-inventory.json) combines this section with the complete runtime package. Tests are intentionally excluded from public source reference pages because they document verification scenarios rather than supported runtime or user-facing programs.
 
 Use the navigation beneath this page to browse `scripts` and `examples`.

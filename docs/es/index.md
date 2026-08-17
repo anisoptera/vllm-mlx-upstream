@@ -52,8 +52,8 @@ vllm-mlx incorpora aceleración GPU nativa de Apple Silicon a vLLM mediante la i
 - [Benchmarks de audio](benchmarks/audio.md)
 
 ### Desarrollo
-- [Arquitectura (en inglés)](/vllm-mlx/development/architecture/)
-- [Contribuir (en inglés)](/vllm-mlx/development/contributing/)
+- [Arquitectura (en inglés)](/development/architecture/)
+- [Contribuir (en inglés)](/development/contributing/)
 
 ## Requisitos
 

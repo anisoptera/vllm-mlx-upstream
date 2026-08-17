@@ -57,8 +57,8 @@ vllm-mlx apporte l'accélération GPU native d'Apple Silicon à vLLM en intégra
 
 ### Développement
 
-- [Architecture (en anglais)](/vllm-mlx/development/architecture/)
-- [Contribuer (en anglais)](/vllm-mlx/development/contributing/)
+- [Architecture (en anglais)](/development/architecture/)
+- [Contribuer (en anglais)](/development/contributing/)
 
 ## Prérequis
 

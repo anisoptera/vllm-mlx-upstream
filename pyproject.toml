@@ -130,7 +130,7 @@ audio = [
 
 [project.urls]
 Homepage = "https://github.com/waybarrios/vllm-mlx"
-Documentation = "https://waybarrios.github.io/vllm-mlx/"
+Documentation = "https://vllm-mlx.is-a.dev/"
 Repository = "https://github.com/waybarrios/vllm-mlx"
 Issues = "https://github.com/waybarrios/vllm-mlx/issues"
 "Release Notes" = "https://github.com/waybarrios/vllm-mlx/releases"
