@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urljoin
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
@@ -205,3 +206,18 @@ def test_homepage_edit_action_is_removed_without_affecting_docs_pages() -> None:
 
     assert 'rel="edit"' not in on_post_page(home)
     assert 'rel="edit"' in on_post_page(guide)
+
+
+def test_language_alternates_are_absolute() -> None:
+    """Search metadata uses absolute URLs for every language alternate."""
+
+    html = (
+        '<link rel="alternate" href="./" hreflang="en">'
+        '<link rel="alternate" href="../../es/guides/server/" hreflang="es">'
+    )
+    page = SimpleNamespace(canonical_url="https://vllm-mlx.is-a.dev/guides/server/")
+
+    rendered = on_post_page(html, page=page)
+
+    assert 'href="https://vllm-mlx.is-a.dev/guides/server/"' in rendered
+    assert 'href="https://vllm-mlx.is-a.dev/es/guides/server/"' in rendered

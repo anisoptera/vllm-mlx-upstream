@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% if page and page.is_homepage %}
+    {% set social_title = config.site_name %}
+  {% elif page and page.meta and page.meta.title %}
+    {% set social_title = page.meta.title %}
+  {% elif page and page.title %}
+    {% set social_title = page.title | striptags %}
+  {% else %}
+    {% set social_title = config.site_name %}
+  {% endif %}
+  {% if page and page.meta and page.meta.description %}
+    {% set social_description = page.meta.description %}
+  {% else %}
+    {% set social_description = config.site_description %}
+  {% endif %}
+  <meta property="og:type" content="{% if page and page.is_homepage %}website{% else %}article{% endif %}">
+  <meta property="og:title" content="{{ social_title }}">
+  <meta property="og:description" content="{{ social_description }}">
+  <meta property="og:url" content="{% if page and page.canonical_url %}{{ page.canonical_url }}{% else %}{{ config.site_url }}{% endif %}">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:image" content="https://opengraph.githubassets.com/1/waybarrios/vllm-mlx">
+  <meta property="og:image:alt" content="vllm-mlx repository preview">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ social_title }}">
+  <meta name="twitter:description" content="{{ social_description }}">
+  <meta name="twitter:image" content="https://opengraph.githubassets.com/1/waybarrios/vllm-mlx">
+  <meta name="twitter:image:alt" content="vllm-mlx repository preview">
+  {% if page and page.file %}
+    <link rel="alternate" type="text/markdown" href="{{ config.site_url }}{{ page.file.src_uri }}" title="Markdown source">
+  {% else %}
+    <meta name="robots" content="noindex,follow">
+  {% endif %}
+  <link rel="alternate" type="text/plain" href="{{ config.site_url }}llms.txt" title="LLM-readable documentation index">
+  {% if page and page.is_homepage %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://vllm-mlx.is-a.dev/#website",
+            "name": "vllm-mlx",
+            "url": "https://vllm-mlx.is-a.dev/",
+            "description": "OpenAI and Anthropic compatible LLM inference on Apple Silicon"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://vllm-mlx.is-a.dev/#software",
+            "name": "vllm-mlx",
+            "description": "OpenAI and Anthropic compatible LLM inference on Apple Silicon",
+            "url": "https://vllm-mlx.is-a.dev/",
+            "codeRepository": "https://github.com/waybarrios/vllm-mlx",
+            "downloadUrl": "https://pypi.org/project/vllm-mlx/",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "macOS on Apple Silicon",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "license": "https://www.apache.org/licenses/LICENSE-2.0"
+          }
+        ]
+      }
+    </script>
+  {% elif page %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": {{ social_title | tojson }},
+        "description": {{ social_description | tojson }},
+        "url": {{ page.canonical_url | tojson }},
+        "isPartOf": {
+          "@type": "WebSite",
+          "@id": "https://vllm-mlx.is-a.dev/#website",
+          "name": "vllm-mlx",
+          "url": "https://vllm-mlx.is-a.dev/"
+        }
+      }
+    </script>
+  {% endif %}
+{% endblock %}

@@ -1,5 +1,6 @@
 site_name: vllm-mlx
 site_description: OpenAI and Anthropic compatible LLM inference on Apple Silicon
+site_author: vllm-mlx contributors
 site_url: https://vllm-mlx.is-a.dev/
 repo_url: https://github.com/waybarrios/vllm-mlx
 repo_name: waybarrios/vllm-mlx
@@ -185,6 +186,7 @@ nav:
 
 theme:
   name: material
+  custom_dir: overrides
   language: en
   font:
     text: IBM Plex Sans

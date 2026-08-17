@@ -4,7 +4,7 @@
 
 MkDocs hooks that publish machine-readable documentation artifacts.
 
-[View the complete module source at #L1-L202](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L1-L202).
+[View the complete module source at #L1-L225](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L1-L225).
 
 ## API details
 
@@ -50,7 +50,7 @@ This callable has no explicit inputs.
 Function `_source_revision` calls `os.environ.get`, `re.fullmatch`, `candidate.lower`, `subprocess.run`; can raise `ValueError`; has 2 explicit return paths.
 Directly raised exceptions: `ValueError`.
 
-[View source #L26-L45](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L26-L45).
+[View source #L27-L46](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L27-L46).
 
 </details>
 
@@ -80,7 +80,7 @@ Replace mutable gh-pages source links with one commit permalink.
 Function `_pin_source_links` calls `text.replace`; returns `text.replace(SOURCE_BRANCH_URL, f'https://github.com/waybarrios/vllm-mlx/blob/{revision}/')`.
 No direct `raise` statement appears in this definition.
 
-[View source #L48-L54](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L48-L54).
+[View source #L49-L55](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L49-L55).
 
 </details>
 
@@ -110,7 +110,7 @@ Pin every rendered GitHub source link to the build commit.
 Function `on_page_markdown` calls `_pin_source_links`, `_source_revision`; returns `_pin_source_links(markdown, _source_revision())`.
 No direct `raise` statement appears in this definition.
 
-[View source #L57-L61](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L57-L61).
+[View source #L58-L62](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L58-L62).
 
 </details>
 
@@ -118,16 +118,17 @@ No direct `raise` statement appears in this definition.
 <summary><code>scripts.mkdocs_hooks.on_post_page</code> · function</summary>
 
 ```python
-scripts.mkdocs_hooks.on_post_page(output: str, **kwargs) -> str
+scripts.mkdocs_hooks.on_post_page(output: str, page = None, **kwargs) -> str
 ```
 
-Remove the repository edit action from localized homepages only.
+Normalize search alternates and localized homepage presentation.
 
 **Parameters**
 
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `output` | `str` | `yes` | `none` | Required positional or keyword input. |
+| `page` | `not annotated` | `no` | `None` | Optional positional or keyword input; defaults to `None`. |
 | `**kwargs` | `not annotated` | `no` | `none` | Additional variadic keyword inputs accepted by this callable. |
 
 **Returns**
@@ -137,10 +138,10 @@ Remove the repository edit action from localized homepages only.
 
 **Exceptions and behavior**
 
-Function `on_post_page` calls `re.sub`; has 2 explicit return paths.
+Function `on_post_page` calls `getattr`, `re.sub`; has 2 explicit return paths.
 No direct `raise` statement appears in this definition.
 
-[View source #L64-L76](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L64-L76).
+[View source #L65-L89](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L65-L89).
 
 </details>
 
@@ -167,7 +168,7 @@ This callable has no explicit inputs.
 Function `_markdown_documents` calls `sorted`, `(REPOSITORY_ROOT / 'docs').rglob`, `path.read_text(encoding='utf-8').startswith`, `path.read_text`; returns `sorted((path for path in (REPOSITORY_ROOT / 'docs').rglob('*.md') if not path.read_text(encoding='utf-8').startswith('<…`.
 No direct `raise` statement appears in this definition.
 
-[View source #L79-L88](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L79-L88).
+[View source #L92-L101](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L92-L101).
 
 </details>
 
@@ -196,7 +197,7 @@ Write Markdown mirrors, the API inventory, and the full LLM corpus.
 Function `on_post_build` calls `Path`, `build_inventory`, `build_repository_inventory`, `build_cli_inventory`.
 No direct `raise` statement appears in this definition.
 
-[View source #L91-L202](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L91-L202).
+[View source #L104-L225](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L104-L225).
 
 </details>
 
@@ -206,9 +207,9 @@ This map also includes private definitions and nested helpers. The signature col
 
 | Symbol | Kind | Signature and inputs | What it does | Source |
 | --- | --- | --- | --- | --- |
-| [`_source_revision`](#contract-scripts.mkdocs_hooks._source_revision) | function | `_source_revision() -> str` | Return the immutable commit represented by this documentation build. | [#L26-L45](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L26-L45) |
-| [`_pin_source_links`](#contract-scripts.mkdocs_hooks._pin_source_links) | function | `_pin_source_links(text: str, revision: str) -> str` | Replace mutable gh-pages source links with one commit permalink. | [#L48-L54](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L48-L54) |
-| [`on_page_markdown`](#contract-scripts.mkdocs_hooks.on_page_markdown) | function | `on_page_markdown(markdown: str, **kwargs) -> str` | Pin every rendered GitHub source link to the build commit. | [#L57-L61](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L57-L61) |
-| [`on_post_page`](#contract-scripts.mkdocs_hooks.on_post_page) | function | `on_post_page(output: str, **kwargs) -> str` | Remove the repository edit action from localized homepages only. | [#L64-L76](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L64-L76) |
-| [`_markdown_documents`](#contract-scripts.mkdocs_hooks._markdown_documents) | function | `_markdown_documents() -> list[Path]` | Return tracked hand-written documentation pages in stable order. | [#L79-L88](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L79-L88) |
-| [`on_post_build`](#contract-scripts.mkdocs_hooks.on_post_build) | function | `on_post_build(config, **kwargs) -> None` | Write Markdown mirrors, the API inventory, and the full LLM corpus. | [#L91-L202](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L91-L202) |
+| [`_source_revision`](#contract-scripts.mkdocs_hooks._source_revision) | function | `_source_revision() -> str` | Return the immutable commit represented by this documentation build. | [#L27-L46](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L27-L46) |
+| [`_pin_source_links`](#contract-scripts.mkdocs_hooks._pin_source_links) | function | `_pin_source_links(text: str, revision: str) -> str` | Replace mutable gh-pages source links with one commit permalink. | [#L49-L55](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L49-L55) |
+| [`on_page_markdown`](#contract-scripts.mkdocs_hooks.on_page_markdown) | function | `on_page_markdown(markdown: str, **kwargs) -> str` | Pin every rendered GitHub source link to the build commit. | [#L58-L62](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L58-L62) |
+| [`on_post_page`](#contract-scripts.mkdocs_hooks.on_post_page) | function | `on_post_page(output: str, page = None, **kwargs) -> str` | Normalize search alternates and localized homepage presentation. | [#L65-L89](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L65-L89) |
+| [`_markdown_documents`](#contract-scripts.mkdocs_hooks._markdown_documents) | function | `_markdown_documents() -> list[Path]` | Return tracked hand-written documentation pages in stable order. | [#L92-L101](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L92-L101) |
+| [`on_post_build`](#contract-scripts.mkdocs_hooks.on_post_build) | function | `on_post_build(config, **kwargs) -> None` | Write Markdown mirrors, the API inventory, and the full LLM corpus. | [#L104-L225](https://github.com/waybarrios/vllm-mlx/blob/gh-pages/scripts/mkdocs_hooks.py#L104-L225) |

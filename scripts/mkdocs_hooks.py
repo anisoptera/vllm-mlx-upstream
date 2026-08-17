@@ -8,6 +8,7 @@ import re
 import subprocess
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urljoin
 
 from docs_inventory import (
     REPOSITORY_ROOT,
@@ -61,10 +62,22 @@ def on_page_markdown(markdown: str, **kwargs) -> str:
     return _pin_source_links(markdown, _source_revision())
 
 
-def on_post_page(output: str, **kwargs) -> str:
-    """Remove the repository edit action from localized homepages only."""
+def on_post_page(output: str, page=None, **kwargs) -> str:
+    """Normalize search alternates and localized homepage presentation."""
 
     del kwargs
+    canonical_url = getattr(page, "canonical_url", "")
+    if canonical_url:
+        output = re.sub(
+            r'(<link\s+rel="alternate"\s+href=")([^"]+)'
+            r'("\s+hreflang="[^"]+"\s*/?>)',
+            lambda match: (
+                f"{match.group(1)}"
+                f"{urljoin(canonical_url, match.group(2))}"
+                f"{match.group(3)}"
+            ),
+            output,
+        )
     if 'class="vllm-hero"' not in output:
         return output
     return re.sub(
@@ -134,6 +147,16 @@ def on_post_build(config, **kwargs) -> None:
         full_parts.extend(
             [_pin_source_links(render_module_for_llms(module), source_revision), ""]
         )
+
+    symbol_index_source = docs_dir / "reference" / "python-symbols.md"
+    symbol_index_mirror = site_dir / "reference" / "python-symbols.md"
+    symbol_index_mirror.parent.mkdir(parents=True, exist_ok=True)
+    symbol_index_mirror.write_text(
+        _pin_source_links(
+            symbol_index_source.read_text(encoding="utf-8"), source_revision
+        ),
+        encoding="utf-8",
+    )
 
     cli_markdown = _pin_source_links(
         render_cli_reference(cli_inventory), source_revision
