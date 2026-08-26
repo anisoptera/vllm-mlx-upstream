@@ -224,7 +224,6 @@ def _install_chunked_prefill(
 
     from mlx_lm.generate import (
         _left_pad_prompts,
-        _make_cache,
         _merge_caches,
         _right_pad_prompts,
     )
@@ -573,9 +572,13 @@ def _install_chunked_prefill(
 
                     if not is_cached:
                         padded = _left_pad_prompts(inputs_raw, max_length=max_length)
-                        prompt_cache = _make_cache(
-                            self.model, padding, self.max_kv_size
-                        )
+                        # Batch the per-request caches supplied by the scheduler,
+                        # even when they are empty. Rebuilding through
+                        # mlx-lm's _make_cache loses max_kv_size for models whose
+                        # make_cache() returns plain KVCache layers.
+                        prompt_cache = _merge_caches(caches)
+                        for c in prompt_cache:
+                            c.prepare(left_padding=padding)
                     else:
                         last_inputs = mx.array(
                             [p[-prompt_checkpoint:] for p in inputs_raw]
@@ -1777,9 +1780,19 @@ class Scheduler:
                 )
             if type(restored) is not type(expected):
                 return False
-            restored_size = getattr(restored, "max_size", None)
-            expected_size = getattr(expected, "max_size", None)
-            return restored_size == expected_size
+            missing = object()
+            topology_attributes = (
+                "max_size",
+                "keep",
+                "chunk_size",
+                "group_size",
+                "bits",
+            )
+            return all(
+                getattr(restored, attribute, missing)
+                == getattr(expected, attribute, missing)
+                for attribute in topology_attributes
+            )
 
         return all(_matches(r, e) for r, e in zip(cache, reference))
 
@@ -1794,7 +1807,7 @@ class Scheduler:
         if key is None:
             key = list(request.prompt_token_ids)[: getattr(request, "cached_tokens", 0)]
         try:
-            if key and cache.remove(list(key)):
+            if key and cache.remove(list(key), include_ssd=True):
                 logger.debug(
                     "[cache] evicted %d-token entry incompatible with the "
                     "configured KV bound",
@@ -2086,6 +2099,12 @@ class Scheduler:
             request.cache_hit_type = self.memory_aware_cache._last_match_type
             if cache:
                 request.prompt_cache = cache
+                matched_key = getattr(
+                    self.memory_aware_cache, "_last_matched_key", None
+                )
+                request.prompt_cache_key = (
+                    list(matched_key) if matched_key is not None else None
+                )
                 request.cached_tokens = len(request.prompt_token_ids) - len(remaining)
                 request.remaining_tokens = remaining
                 logger.info(
@@ -3516,8 +3535,13 @@ class Scheduler:
 
             # Use the SSD entry's actual token count for read and store,
             # NOT the full prompt tokens. For prefix hits these differ.
-            matched_count = candidate["matched_tokens"]
-            matched_tokens = tuple(request.prompt_token_ids[:matched_count])
+            matched_tokens = tuple(
+                candidate.get(
+                    "matched_key",
+                    request.prompt_token_ids[: candidate["matched_tokens"]],
+                )
+            )
+            matched_count = len(matched_tokens)
 
             try:
                 cache_layers = self._ssd_tier._read_entry(
@@ -3553,6 +3577,7 @@ class Scheduler:
             )
 
             request.prompt_cache = reconstructed
+            request.prompt_cache_key = list(matched_tokens)
             request.cached_tokens = matched_count
             request.remaining_tokens = request.prompt_token_ids[matched_count:]
             request.cache_hit_type = "ssd_hit"
@@ -3593,8 +3618,15 @@ class Scheduler:
                 self.memory_aware_cache.release_reserved_memory(nbytes)
 
         # Use matched token count, not full prompt, for prefix hits
-        matched_count = candidate.get("matched_tokens", len(request.prompt_token_ids))
-        matched_tokens = tuple(request.prompt_token_ids[:matched_count])
+        matched_tokens = tuple(
+            candidate.get(
+                "matched_key",
+                request.prompt_token_ids[
+                    : candidate.get("matched_tokens", len(request.prompt_token_ids))
+                ],
+            )
+        )
+        matched_count = len(matched_tokens)
 
         cache_layers = await self._ssd_tier.async_promote(
             matched_tokens, reserve_budget, release_budget
@@ -3619,6 +3651,7 @@ class Scheduler:
         )
 
         request.prompt_cache = reconstructed
+        request.prompt_cache_key = list(matched_tokens)
         request.cached_tokens = matched_count
         request.remaining_tokens = request.prompt_token_ids[matched_count:]
         request.cache_hit_type = "ssd_hit"

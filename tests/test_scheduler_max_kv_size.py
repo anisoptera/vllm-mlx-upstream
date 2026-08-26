@@ -15,7 +15,11 @@ pytest.importorskip("mlx.core")
 mx = pytest.importorskip("mlx.core")
 cache_mod = pytest.importorskip("mlx_lm.models.cache")
 
-from vllm_mlx.scheduler import Scheduler, SchedulerConfig  # noqa: E402
+from vllm_mlx.scheduler import (  # noqa: E402
+    Scheduler,
+    SchedulerConfig,
+    _install_chunked_prefill,
+)
 
 
 class _Layer:
@@ -144,6 +148,53 @@ class TestBoundedCacheTopology:
         ]
         assert all(isinstance(c, cache_mod.RotatingKVCache) for c in bounded)
         assert all(c.max_size == 64 for c in bounded)
+
+    def test_chunked_prefill_keeps_the_scheduler_supplied_bound(self):
+        """An empty bounded cache must not be rebuilt through ``make_cache``."""
+
+        class _ModelWithMakeCache(_Model):
+            def make_cache(self):
+                return [cache_mod.KVCache() for _ in self.layers]
+
+            def __call__(self, inputs, cache=None):
+                keys = mx.zeros((inputs.shape[0], 1, inputs.shape[1], 4))
+                for layer in cache:
+                    layer.update_and_fetch(keys, keys)
+                return mx.zeros((inputs.shape[0], inputs.shape[1], 8))
+
+        class _Stats:
+            prompt_tokens = 0
+            prompt_time = 0.0
+            generation_time = 0.0
+
+        class _BatchGenerator:
+            def __init__(self):
+                self.model = _ModelWithMakeCache(n_layers=1)
+                supplied = Scheduler._bound_cache_layers(self.model.make_cache(), 64)
+                self.unprocessed_prompts = [
+                    (7, [1, 2, 3, 4, 5], 16, supplied, None, [None], 2)
+                ]
+                self._stats = _Stats()
+                self._partial = None
+                self.active_batch = None
+                self.prefill_batch_size = 1
+                self.completion_batch_size = 1
+                self.max_kv_size = 64
+                self.stop_tokens = set()
+                self.prompt_progress_callback = lambda _progress: None
+                self.prompt_checkpoint_callback = None
+                self._next = lambda: []
+                self.remove = lambda _uids: None
+                self._process_prompts = lambda _prompts: None
+
+        batch_gen = _BatchGenerator()
+        _install_chunked_prefill(batch_gen, budget=2)
+
+        batch_gen._next()
+
+        live = batch_gen._partial["cache"]
+        assert isinstance(live[0], cache_mod.BatchRotatingKVCache)
+        assert live[0].max_size == 64
 
 
 def _sampling_params():
@@ -499,6 +550,16 @@ class TestNativeRotatingCachesAreNotOperatorBounded:
 
         assert sched._restored_cache_matches_kv_bound(stale) is False
 
+    def test_a_different_keep_layout_is_rejected(self):
+        sched = _scheduler(max_kv_size=0)
+        sched.model = _SlidingModel()
+        stale = [
+            cache_mod.RotatingKVCache(max_size=_SlidingModel.WINDOW, keep=4)
+            for _ in range(3)
+        ]
+
+        assert sched._restored_cache_matches_kv_bound(stale) is False
+
     def test_operator_bound_still_applies_to_plain_models(self):
         sched = _scheduler(max_kv_size=64)
         sched.model = _Model()
@@ -531,7 +592,7 @@ class TestIncompatibleEntryIsEvictedFromTheSharedCache:
         class _Cache:
             _entries = {}
 
-            def remove(self, key):
+            def remove(self, key, *, include_ssd=False):
                 removed.append(list(key))
                 return True
 
@@ -552,6 +613,45 @@ class TestIncompatibleEntryIsEvictedFromTheSharedCache:
             [1, 2, 3, 4, 5]
         ], f"the stale entry was not evicted from the shared cache: {removed}"
 
+    def test_fetch_retains_the_real_match_key_and_evicts_both_tiers(self):
+        removed = []
+
+        class _Cache:
+            _entries = {}
+            _last_match_type = "lcp"
+            _last_matched_key = (1, 2, 3, 9)
+
+            def fetch(self, _tokens):
+                return [object()], [8]
+
+            def remove(self, key, include_ssd=False):
+                removed.append((list(key), include_ssd))
+                return True
+
+        from vllm_mlx.request import Request
+        from vllm_mlx.scheduler import SamplingParams
+
+        sched = Scheduler(
+            model=_Model(),
+            tokenizer=__import__("types").SimpleNamespace(
+                eos_token_id=0, eos_token_ids={0}
+            ),
+            config=SchedulerConfig(enable_prefix_cache=False, max_kv_size=64),
+        )
+        sched.memory_aware_cache = _Cache()
+        request = Request(
+            request_id="req-real-key",
+            prompt="prompt",
+            prompt_token_ids=[1, 2, 3, 8],
+            sampling_params=SamplingParams(),
+        )
+
+        sched.add_request(request)
+        sched._evict_incompatible_entry(request)
+
+        assert request.prompt_cache_key == [1, 2, 3, 9]
+        assert removed == [([1, 2, 3, 9], True)]
+
     def test_scheduler_evicts_it_on_the_real_path(self):
         """Drives _schedule_waiting so the call site itself is covered.
 
@@ -563,7 +663,7 @@ class TestIncompatibleEntryIsEvictedFromTheSharedCache:
         class _Cache:
             _entries = {}
 
-            def remove(self, key):
+            def remove(self, key, *, include_ssd=False):
                 removed.append(list(key))
                 return True
 
