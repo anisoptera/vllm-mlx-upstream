@@ -266,6 +266,81 @@ class TestCompletionRequest:
             )
 
 
+class TestCompletionMllmDraft:
+    """Test completion assistant-drafter overrides."""
+
+    @pytest.mark.anyio
+    async def test_nonstream_completion_forwards_mllm_draft_opt_out(self, monkeypatch):
+        from vllm_mlx.server import CompletionRequest, create_completion
+        import vllm_mlx.server as server
+
+        captured = {}
+
+        class DummyEngine:
+            async def generate(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(
+                    text="ok",
+                    finish_reason="stop",
+                    completion_tokens=1,
+                    prompt_tokens=1,
+                )
+
+        monkeypatch.setattr(server, "_model_name", "test-model")
+        monkeypatch.setattr(server, "_model_manager", None)
+        monkeypatch.setattr(server, "_residency_manager", None)
+        monkeypatch.setattr(server, "_default_model_key", None)
+        monkeypatch.setattr(server, "get_engine", lambda: DummyEngine())
+
+        request = CompletionRequest(
+            model="test-model",
+            prompt="hello",
+            mllm_draft=False,
+        )
+        response = await create_completion(request, raw_request=None)
+
+        assert response.choices[0].text == "ok"
+        assert captured["mllm_draft"] is False
+
+    @pytest.mark.anyio
+    async def test_stream_completion_forwards_mllm_draft_opt_out(self):
+        from vllm_mlx.api.models import CompletionRequest
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import stream_completion
+
+        captured = {}
+
+        class DummyEngine:
+            async def stream_generate(self, **kwargs):
+                captured.update(kwargs)
+                yield GenerationOutput(
+                    text="ok",
+                    new_text="ok",
+                    finished=True,
+                    finish_reason="stop",
+                    completion_tokens=1,
+                    prompt_tokens=1,
+                )
+
+        request = CompletionRequest(
+            model="test-model",
+            prompt="hello",
+            mllm_draft=False,
+        )
+        chunks = [
+            chunk
+            async for chunk in stream_completion(
+                DummyEngine(),
+                "hello",
+                request,
+                max_tokens=8,
+            )
+        ]
+
+        assert chunks
+        assert captured["mllm_draft"] is False
+
+
 class TestSamplingDefaults:
     """Test server-wide sampling default resolution."""
 
@@ -619,6 +694,28 @@ class TestServeCli:
 class TestStandaloneServerCli:
     """Test standalone server CLI argument parsing."""
 
+    def test_embedding_length_options_parse(self):
+        """Standalone server should expose the embedding length controls."""
+        from vllm_mlx.server import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "--embedding-model",
+                "mlx-community/Qwen3-Embedding-4B-4bit",
+                "--embedding-max-length",
+                "1024",
+                "--embedding-overflow-policy",
+                "error",
+            ]
+        )
+
+        assert args.embedding_max_length == 1024
+        assert args.embedding_overflow_policy == "error"
+
+        auto_args = parser.parse_args(["--embedding-max-length", "auto"])
+        assert auto_args.embedding_max_length is None
+
     def test_trust_remote_code_flag_defaults_false(self):
         """Standalone server should require explicit opt-in for remote code loading."""
         from vllm_mlx.server import create_parser
@@ -755,6 +852,62 @@ class TestLoadModelTrustRemoteCode:
             )
 
         assert mock_engine.call_args.kwargs["trust_remote_code"] is True
+
+    def test_load_model_forwards_default_mllm_draft_to_simple_engine(self, monkeypatch):
+        """Configured assistant drafters must not require a private request flag."""
+        from vllm_mlx import server
+
+        # load_model mutates module-level serving state. Register the current
+        # value with monkeypatch so this test cannot affect later request tests.
+        monkeypatch.setattr(server, "_model_name", server._model_name)
+
+        fake_engine = MagicMock()
+        fake_loop = MagicMock()
+
+        with (
+            patch.object(
+                server, "SimpleEngine", return_value=fake_engine
+            ) as mock_engine,
+            patch.object(server, "_detect_native_tool_support", return_value=False),
+            patch("vllm_mlx.server.asyncio.new_event_loop", return_value=fake_loop),
+            patch("vllm_mlx.server.asyncio.set_event_loop"),
+        ):
+            server.load_model(
+                "gemma4",
+                force_mllm=True,
+                mllm_draft_model="assistant",
+                mllm_draft_kind="mtp",
+                default_mllm_draft=True,
+            )
+
+        assert mock_engine.call_args.kwargs["default_mllm_draft"] is True
+
+    def test_load_model_forwards_default_mllm_draft_to_batched_engine(
+        self, monkeypatch
+    ):
+        """Batched assistant drafters should honor the configured default."""
+        from vllm_mlx import server
+
+        monkeypatch.setattr(server, "_model_name", server._model_name)
+
+        fake_engine = MagicMock()
+
+        with (
+            patch.object(
+                server, "BatchedEngine", return_value=fake_engine
+            ) as mock_engine,
+            patch.object(server, "_detect_native_tool_support", return_value=False),
+        ):
+            server.load_model(
+                "gemma4",
+                use_batching=True,
+                force_mllm=True,
+                mllm_draft_model="assistant",
+                mllm_draft_kind="mtp",
+                default_mllm_draft=True,
+            )
+
+        assert mock_engine.call_args.kwargs["default_mllm_draft"] is True
 
 
 # =============================================================================
@@ -2087,6 +2240,223 @@ class TestStreamChatCompletion:
         }
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize("parser_name", ["deepseek_v4", "auto"])
+    async def test_deepseek_v4_split_marker_never_leaks(self, monkeypatch, parser_name):
+        """The request-local DSML parser must see text before the split marker."""
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        d = "｜DSML｜"
+        deltas = [
+            "Checking.\n\n",
+            "<",
+            d,
+            "tool_calls>\n",
+            f'<{d}invoke name="get_weather">\n',
+            f'<{d}parameter name="city" string="true">Prague</{d}parameter>\n',
+            f"</{d}invoke>\n",
+            f"</{d}tool_calls>",
+        ]
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                for index, delta in enumerate(deltas):
+                    finished = index == len(deltas) - 1
+                    yield GenerationOutput(
+                        text="",
+                        new_text=delta,
+                        finished=finished,
+                        finish_reason="stop" if finished else None,
+                    )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", True)
+        monkeypatch.setattr(server, "_tool_call_parser", parser_name)
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+            stream=True,
+        )
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        content = "".join(
+            payload["choices"][0]["delta"].get("content") or ""
+            for payload in payloads
+            if payload["choices"]
+        )
+        tool_payloads = [
+            payload
+            for payload in payloads
+            if payload["choices"] and payload["choices"][0]["delta"].get("tool_calls")
+        ]
+
+        assert content.strip() == "Checking."
+        assert d not in content
+        assert len(tool_payloads) == 1
+        assert (
+            tool_payloads[0]["choices"][0]["delta"]["tool_calls"][0]["function"]["name"]
+            == "get_weather"
+        )
+
+    @pytest.mark.anyio
+    async def test_deepseek_v4_truncated_dsml_is_visible_at_eos(self, monkeypatch):
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        d = "｜DSML｜"
+        truncated = f'Before <{d}tool_calls>\n<{d}invoke name="f'
+        model_output = "thinking</think>" + truncated
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="",
+                    new_text=model_output,
+                    finished=False,
+                )
+                yield GenerationOutput(
+                    text="",
+                    new_text="",
+                    finished=True,
+                    finish_reason="length",
+                )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser_name", "deepseek_v4")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", True)
+        monkeypatch.setattr(server, "_tool_call_parser", "deepseek_v4")
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "f",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+            stream=True,
+        )
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        content = "".join(
+            payload["choices"][0]["delta"].get("content") or ""
+            for payload in payloads
+            if payload["choices"]
+        )
+
+        assert content == truncated
+        assert payloads[-1]["choices"][0]["finish_reason"] == "length"
+
+    @pytest.mark.anyio
+    async def test_deepseek_v4_reasoning_flushes_final_lt_and_terminal(
+        self, monkeypatch
+    ):
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(text="", new_text="2 ", finished=False)
+                yield GenerationOutput(
+                    text="",
+                    new_text="<",
+                    finished=True,
+                    finish_reason="stop",
+                )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser_name", "deepseek_v4")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", False)
+        monkeypatch.setattr(server, "_tool_call_parser", None)
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="hi")],
+            stream=True,
+        )
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        reasoning = "".join(
+            payload["choices"][0]["delta"].get("reasoning_content") or ""
+            for payload in payloads
+            if payload["choices"]
+        )
+
+        assert reasoning == "2 <"
+        assert payloads[-1]["choices"][0]["finish_reason"] == "stop"
+
+    @pytest.mark.anyio
     async def test_stream_without_parser_flags_keeps_plain_text(self, monkeypatch):
         """Generic streaming fallback should not interfere with normal text."""
         from vllm_mlx.engine.base import GenerationOutput
@@ -2240,6 +2610,190 @@ class TestStreamChatCompletion:
         assert delta.get("content") is None
         assert tool_payloads[0]["choices"][0]["finish_reason"] == "tool_calls"
 
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("model_chunks", "expected_content"),
+        [
+            (
+                [
+                    "<|python_tag|>",
+                    '{"name": "read", ',
+                    '"parameters": {"file_path": "/tmp/test.py"}}',
+                ],
+                "",
+            ),
+            (
+                [
+                    "{",
+                    '"type": "function", "name": "read", ',
+                    '"parameters": {"file_path": "/tmp/test.py"}}',
+                ],
+                "",
+            ),
+            (
+                [
+                    "Before <|python_tag|>"
+                    '{"name": "read", "parameters": '
+                    '{"file_path": "/tmp/test.py"}} After'
+                ],
+                "Before  After",
+            ),
+        ],
+        ids=["python-tag", "bare-json", "content-and-python-tag"],
+    )
+    async def test_llama_formats_stream_through_server_gate(
+        self, monkeypatch, model_chunks, expected_content
+    ):
+        """Llama formats must reach the parser without leaking raw JSON."""
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        from vllm_mlx.tool_parsers.llama_tool_parser import LlamaToolParser
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+
+            async def stream_chat(self, messages, **kwargs):
+                for index, model_chunk in enumerate(model_chunks):
+                    is_last = index == len(model_chunks) - 1
+                    yield GenerationOutput(
+                        text="",
+                        new_text=model_chunk,
+                        finished=is_last,
+                        finish_reason="stop" if is_last else None,
+                        prompt_tokens=4 if is_last else 0,
+                        completion_tokens=3 if is_last else 0,
+                    )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", True)
+        monkeypatch.setattr(server, "_tool_call_parser", "llama")
+        monkeypatch.setattr(server, "_tool_parser_instance", LlamaToolParser())
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "description": "Read a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"file_path": {"type": "string"}},
+                            "required": ["file_path"],
+                        },
+                    },
+                }
+            ],
+            stream=True,
+        )
+
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        tool_payloads = [
+            payload
+            for payload in payloads
+            if payload["choices"] and payload["choices"][0]["delta"].get("tool_calls")
+        ]
+        content = "".join(
+            payload["choices"][0]["delta"].get("content") or ""
+            for payload in payloads
+            if payload["choices"]
+        )
+
+        assert len(tool_payloads) == 1
+        tool_call = tool_payloads[0]["choices"][0]["delta"]["tool_calls"][0]
+        assert tool_call["function"]["name"] == "read"
+        assert tool_call["function"]["arguments"] == ('{"file_path": "/tmp/test.py"}')
+        assert content == expected_content
+        assert tool_payloads[0]["choices"][0]["finish_reason"] == "tool_calls"
+
+    @pytest.mark.anyio
+    async def test_incomplete_llama_json_is_flushed_at_end_of_stream(self, monkeypatch):
+        """An ambiguous final JSON prefix must remain assistant content."""
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        from vllm_mlx.tool_parsers import LlamaToolParser
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="",
+                    new_text="{",
+                    finished=False,
+                )
+                yield GenerationOutput(
+                    text="",
+                    new_text="",
+                    finished=True,
+                    finish_reason="length",
+                    prompt_tokens=4,
+                    completion_tokens=1,
+                )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", True)
+        monkeypatch.setattr(server, "_tool_call_parser", "llama")
+        monkeypatch.setattr(server, "_tool_parser_instance", LlamaToolParser())
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="Return JSON")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "description": "Read a file",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+            stream=True,
+        )
+
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        choices = [payload["choices"][0] for payload in payloads if payload["choices"]]
+
+        assert (
+            "".join(choice["delta"].get("content") or "" for choice in choices) == "{"
+        )
+        assert choices[-1]["finish_reason"] == "length"
+
     def test_streaming_tool_markup_precheck_uses_bounded_boundary(self):
         """Pre-marker checks should not need the full accumulated stream."""
         import vllm_mlx.server as server
@@ -2254,6 +2808,33 @@ class TestStreamChatCompletion:
         )
         assert server._streaming_tool_markup_possible_after_delta(
             long_prefix + "[read(", '{"file_path": "/tmp/test.py"}'
+        )
+
+    def test_streaming_tool_markup_precheck_detects_llama_json_prefixes(self):
+        """The server gate must buffer only viable Llama bare-JSON prefixes."""
+        import vllm_mlx.server as server
+        from vllm_mlx.tool_parsers import LlamaToolParser
+
+        parser = LlamaToolParser()
+        assert server._streaming_tool_markup_possible_after_delta("", "{", parser)
+        assert server._streaming_tool_markup_possible_after_delta("{", '"na', parser)
+        assert server._streaming_tool_markup_possible_after_delta(
+            '{"na', 'me": "read_file",', parser
+        )
+        assert server._streaming_tool_markup_possible_after_delta(
+            "", '  {"type": "function",', parser
+        )
+        assert not server._streaming_tool_markup_possible_after_delta(
+            "", '{"value": 42}', parser
+        )
+
+    def test_streaming_tool_markup_precheck_detects_split_python_tag(self):
+        """The server gate must recognize python-tag across delta boundaries."""
+        import vllm_mlx.server as server
+        from vllm_mlx.tool_parsers import LlamaToolParser
+
+        assert server._streaming_tool_markup_possible_after_delta(
+            "<|python_", 'tag|>{"name": "read_file"}', LlamaToolParser()
         )
 
     @pytest.mark.anyio
@@ -2316,7 +2897,6 @@ class TestStreamChatCompletion:
             def extract_tool_calls_streaming(
                 self, previous_text, current_text, delta_text, request=None
             ):
-                assert request == {"tools": []}
                 if "</tool_call>" in current_text:
                     return {
                         "tool_calls": [
@@ -2342,6 +2922,20 @@ class TestStreamChatCompletion:
         request = ChatCompletionRequest(
             model="request-model",
             messages=[Message(role="user", content="hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search",
+                        "description": "Search for information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"q": {"type": "string"}},
+                            "required": ["q"],
+                        },
+                    },
+                }
+            ],
             stream=True,
         )
 
@@ -2377,6 +2971,351 @@ class TestStreamChatCompletion:
             "prompt_tokens": 7,
             "completion_tokens": 3,
             "total_tokens": 10,
+        }
+
+    @pytest.mark.anyio
+    async def test_stream_terminal_finish_reason_when_tool_parser_suppresses_eot(
+        self, monkeypatch
+    ):
+        """A tool_calls stream must still end with finish_reason when the engine's
+        finished output is swallowed by the tool parser's `continue`.
+
+        Reproduces the gemma4 production failure: the model emits the complete
+        canonical call (end marker included) in one delta, then a bare <turn|>
+        end-of-turn token as the terminal output. The tool parser finds nothing
+        new in that delta and suppresses it — without a guard, no chunk ever
+        carries finish_reason and strict OpenAI clients abort with
+        "Stream ended without finish_reason". Ref: #672.
+        """
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                chunks = [
+                    GenerationOutput(
+                        text="",
+                        new_text=(
+                            '<|tool_call>call:get_weather{<|"|>city<|"|>: '
+                            '<|"|>Paris<|"|>}<tool_call|>'
+                        ),
+                        finished=False,
+                    ),
+                    GenerationOutput(
+                        text="",
+                        new_text="<turn|>",
+                        finished=True,
+                        finish_reason="stop",
+                        prompt_tokens=11,
+                        completion_tokens=5,
+                    ),
+                ]
+                for chunk in chunks:
+                    yield chunk
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", True)
+        monkeypatch.setattr(server, "_tool_call_parser", "gemma4")
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="request-model",
+            messages=[Message(role="user", content="weather in Paris?")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    },
+                }
+            ],
+            stream=True,
+        )
+
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        tool_payloads = [
+            payload
+            for payload in payloads
+            if payload["choices"] and payload["choices"][0]["delta"].get("tool_calls")
+        ]
+
+        assert len(tool_payloads) == 1
+        assert payloads[-1]["choices"][0]["finish_reason"] == "tool_calls"
+
+    @pytest.mark.anyio
+    async def test_stream_terminal_finish_reason_when_reasoning_path_suppresses_eot(
+        self, monkeypatch
+    ):
+        """Same terminal-swallow class through the reasoning-parser branch:
+        the finished output is consumed by the tool parser after a completed
+        call, so the guard must emit the missing finish_reason chunk. Ref: #672.
+        """
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.reasoning import DeltaMessage
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+
+            async def stream_chat(self, messages, **kwargs):
+                chunks = [
+                    GenerationOutput(
+                        text="",
+                        new_text=(
+                            '<|tool_call>call:search{<|"|>q<|"|>: <|"|>weather<|"|>}'
+                            "<tool_call|>"
+                        ),
+                        finished=False,
+                    ),
+                    GenerationOutput(
+                        text="",
+                        new_text="<turn|>",
+                        finished=True,
+                        finish_reason="stop",
+                        prompt_tokens=7,
+                        completion_tokens=3,
+                    ),
+                ]
+                for chunk in chunks:
+                    yield chunk
+
+        class FakeReasoningParser:
+            def reset_state(self):
+                pass
+
+            def extract_reasoning_streaming(
+                self, previous_text, current_text, delta_text
+            ):
+                return DeltaMessage(content=delta_text)
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", FakeReasoningParser())
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", True)
+        monkeypatch.setattr(server, "_tool_call_parser", "gemma4")
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        class FakeEngineWithTokenizer(FakeEngine):
+            tokenizer = None
+
+        request = ChatCompletionRequest(
+            model="request-model",
+            messages=[Message(role="user", content="hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search",
+                        "description": "Search for information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"q": {"type": "string"}},
+                            "required": ["q"],
+                        },
+                    },
+                }
+            ],
+            stream=True,
+        )
+
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngineWithTokenizer(), request.messages, request
+            )
+        ]
+
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+        tool_payloads = [
+            payload
+            for payload in payloads
+            if payload["choices"] and payload["choices"][0]["delta"].get("tool_calls")
+        ]
+
+        assert len(tool_payloads) == 1
+        assert payloads[-1]["choices"][0]["finish_reason"] == "tool_calls"
+
+    @pytest.mark.anyio
+    async def test_stream_terminal_finish_reason_when_engine_emits_none(
+        self, monkeypatch
+    ):
+        """Regression: SimpleEngine can emit finished=True with finish_reason=None
+        on natural stops before #681. The tracker must not falsely claim a reason
+        was emitted just because finished=True; the guard should still fire and
+        stamp the default "stop". Ref: #672.
+        """
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="",
+                    new_text="hello",
+                    finished=False,
+                )
+                yield GenerationOutput(
+                    text="",
+                    new_text="",
+                    finished=True,
+                    finish_reason=None,
+                    prompt_tokens=3,
+                    completion_tokens=1,
+                )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", False)
+        monkeypatch.setattr(server, "_tool_call_parser", None)
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="request-model",
+            messages=[Message(role="user", content="hi")],
+            stream=True,
+        )
+
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+
+        # The last payload before [DONE] must carry finish_reason="stop".
+        assert payloads[-1]["choices"][0]["finish_reason"] == "stop"
+        usage_payloads = [payload for payload in payloads if payload.get("usage")]
+        assert len(usage_payloads) == 1
+        assert usage_payloads[0] == payloads[-1]
+        assert usage_payloads[0]["usage"] == {
+            "prompt_tokens": 3,
+            "completion_tokens": 1,
+            "total_tokens": 4,
+        }
+
+    @pytest.mark.anyio
+    async def test_stream_terminal_when_reasoning_parser_swallows_finished_delta(
+        self, monkeypatch
+    ):
+        """A reasoning parser may consume the finished delta directly."""
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.reasoning import DeltaMessage
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="",
+                    new_text="visible",
+                    finished=False,
+                )
+                yield GenerationOutput(
+                    text="",
+                    new_text="</think>",
+                    finished=True,
+                    finish_reason=None,
+                    prompt_tokens=5,
+                    completion_tokens=2,
+                )
+
+        class FakeReasoningParser:
+            def reset_state(self):
+                pass
+
+            def extract_reasoning_streaming(
+                self, previous_text, current_text, delta_text
+            ):
+                if delta_text == "</think>":
+                    return None
+                return DeltaMessage(content=delta_text)
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser", FakeReasoningParser())
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", False)
+        monkeypatch.setattr(server, "_tool_call_parser", None)
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="request-model",
+            messages=[Message(role="user", content="hi")],
+            stream=True,
+        )
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+
+        assert payloads[-1]["choices"][0]["finish_reason"] == "stop"
+        usage_payloads = [payload for payload in payloads if payload.get("usage")]
+        assert len(usage_payloads) == 1
+        assert usage_payloads[0] == payloads[-1]
+        assert usage_payloads[0]["usage"] == {
+            "prompt_tokens": 5,
+            "completion_tokens": 2,
+            "total_tokens": 7,
         }
 
     @pytest.mark.anyio
@@ -2455,6 +3394,20 @@ class TestStreamChatCompletion:
         request = ChatCompletionRequest(
             model="request-model",
             messages=[Message(role="user", content="hi")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "Read a file",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"path": {"type": "string"}},
+                            "required": ["path"],
+                        },
+                    },
+                }
+            ],
             stream=True,
         )
 
@@ -2656,6 +3609,155 @@ class TestStreamChatCompletion:
         assert payloads[1]["choices"][0]["finish_reason"] == "stop"
 
     @pytest.mark.anyio
+    async def test_response_format_stream_rejects_schema_invalid_completion(
+        self,
+    ):
+        """A stream must not complete successfully with schema-invalid JSON."""
+        from fastapi import HTTPException
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+
+        class FakeEngine:
+            model_name = "fake-engine"
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="",
+                    new_text='{"sc": [4, "p"]}',
+                    finished=True,
+                    finish_reason="stop",
+                    prompt_tokens=4,
+                    completion_tokens=8,
+                )
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="return scores")],
+            stream=True,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "scores",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "sc": {
+                                "type": "array",
+                                "prefixItems": [
+                                    {"type": "integer", "minimum": 1, "maximum": 5},
+                                    {"type": "integer", "minimum": 1, "maximum": 5},
+                                ],
+                                "minItems": 2,
+                                "maxItems": 2,
+                            }
+                        },
+                        "required": ["sc"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+        )
+
+        with pytest.raises(HTTPException) as excinfo:
+            _ = [
+                chunk
+                async for chunk in stream_chat_completion(
+                    FakeEngine(), request.messages, request
+                )
+            ]
+
+        assert excinfo.value.status_code == 422
+        assert excinfo.value.detail["error"] == "invalid_response_format_output"
+
+    @pytest.mark.anyio
+    async def test_response_format_endpoint_buffers_before_stream_success(
+        self, monkeypatch
+    ):
+        """The HTTP boundary must validate before returning StreamingResponse."""
+        from fastapi import HTTPException
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            PreparedChatInvocation,
+            create_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="",
+                    new_text='{"sc": [4, "p"]}',
+                    finished=True,
+                    finish_reason="stop",
+                    prompt_tokens=4,
+                    completion_tokens=8,
+                )
+
+        fake_engine = FakeEngine()
+
+        async def fake_acquire(*_args, **_kwargs):
+            return fake_engine
+
+        async def fake_release(*_args, **_kwargs):
+            return None
+
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "scores",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "sc": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                        }
+                    },
+                    "required": ["sc"],
+                },
+            },
+        }
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="return scores")],
+            stream=True,
+            response_format=response_format,
+        )
+        prepared = PreparedChatInvocation(
+            messages=[{"role": "user", "content": "return scores"}],
+            chat_kwargs={},
+            response_format=response_format,
+            json_logits_processor=object(),
+        )
+
+        monkeypatch.setattr(server, "_validate_model_name", lambda _model: None)
+        monkeypatch.setattr(server, "_acquire_default_engine_for_request", fake_acquire)
+        monkeypatch.setattr(server, "_release_engine_for_request", fake_release)
+        monkeypatch.setattr(
+            server, "_prepare_chat_completion_invocation", lambda *_args: prepared
+        )
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", False)
+        monkeypatch.setattr(server, "_tool_call_parser", None)
+        monkeypatch.setattr(server, "_default_max_tokens", 128)
+        monkeypatch.setattr(server, "_default_timeout", 30.0)
+
+        with pytest.raises(HTTPException) as excinfo:
+            await create_chat_completion(request, raw_request=None)
+
+        assert excinfo.value.status_code == 422
+
+    @pytest.mark.anyio
     async def test_streaming_chat_no_stream_thread_error_after_residency_preload(
         self, monkeypatch, caplog
     ):
@@ -2735,6 +3837,73 @@ class TestStreamChatCompletion:
         ]
         assert not errors, f"Unexpected streaming wrapper errors: {errors}"
         assert any("data: [DONE]" in chunk for chunk in chunks)
+
+    @pytest.mark.anyio
+    async def test_reasoning_stream_flushes_partial_marker_before_finish(
+        self, monkeypatch
+    ):
+        """A final partial reasoning marker must not be dropped."""
+        from vllm_mlx.engine.base import GenerationOutput
+        from vllm_mlx.server import (
+            ChatCompletionRequest,
+            Message,
+            stream_chat_completion,
+        )
+        import vllm_mlx.server as server
+
+        class FakeEngine:
+            model_name = "fake-engine"
+            tokenizer = None
+
+            async def stream_chat(self, messages, **kwargs):
+                yield GenerationOutput(
+                    text="thinking</thi",
+                    new_text="thinking</thi",
+                    finished=True,
+                    finish_reason="stop",
+                    prompt_tokens=3,
+                    completion_tokens=2,
+                )
+
+        monkeypatch.setattr(server, "_model_name", "served-model")
+        monkeypatch.setattr(server, "_reasoning_parser_name", "qwen3")
+        monkeypatch.setattr(server, "_reasoning_parser", None)
+        monkeypatch.setattr(server, "_enable_auto_tool_choice", False)
+        monkeypatch.setattr(server, "_tool_call_parser", None)
+        monkeypatch.setattr(server, "_tool_parser_instance", None)
+
+        request = ChatCompletionRequest(
+            model="served-model",
+            messages=[Message(role="user", content="hi")],
+            stream=True,
+        )
+        chunks = [
+            chunk
+            async for chunk in stream_chat_completion(
+                FakeEngine(), request.messages, request
+            )
+        ]
+        payloads = [
+            json.loads(chunk.removeprefix("data: ").strip())
+            for chunk in chunks
+            if chunk != "data: [DONE]\n\n"
+        ]
+
+        reasoning = "".join(
+            choice["delta"].get("reasoning_content", "")
+            for payload in payloads
+            for choice in payload["choices"]
+        )
+        finish_reasons = [
+            choice["finish_reason"]
+            for payload in payloads
+            for choice in payload["choices"]
+            if choice["finish_reason"] is not None
+        ]
+
+        assert reasoning == "thinking</thi"
+        assert finish_reasons == ["stop"]
+        assert chunks[-1] == "data: [DONE]\n\n"
 
 
 class TestReasoningAndToolCallsNonStreaming:
@@ -3240,7 +4409,7 @@ class TestChatCompletionStreamingModeSwitching:
 
         bound_thread = {"id": None}
 
-        def fake_bind_generation_streams():
+        def fake_bind_generation_streams(*_args, **_kwargs):
             bound_thread["id"] = threading.get_ident()
 
         class FakeLLMModel:
@@ -3448,7 +4617,7 @@ class TestChatCompletionStreamingModeSwitching:
 
         bound_thread = {"id": None}
 
-        def fake_bind_generation_streams():
+        def fake_bind_generation_streams(*_args, **_kwargs):
             bound_thread["id"] = threading.get_ident()
 
         class FakeLLMModel:
@@ -3565,7 +4734,7 @@ class TestChatCompletionStreamingModeSwitching:
         bound_thread = {"id": None}
         parser_init_threads: list[int] = []
 
-        def fake_bind_generation_streams():
+        def fake_bind_generation_streams(*_args, **_kwargs):
             bound_thread["id"] = threading.get_ident()
 
         class FakeParser:
@@ -3675,6 +4844,19 @@ class TestChatCompletionStreamingModeSwitching:
                 json={
                     "model": "test-model",
                     "messages": [{"role": "user", "content": "Count: one, two, three"}],
+                    "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "count",
+                                "description": "Count values",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {},
+                                },
+                            },
+                        }
+                    ],
                     "max_tokens": 30,
                     "temperature": 0,
                     "stream": True,
