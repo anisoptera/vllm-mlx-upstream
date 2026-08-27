@@ -453,8 +453,11 @@ def _mx_to_numpy_safe(arr: Any) -> tuple[np.ndarray, str | None]:
     """
     try:
         return np.array(arr), None
-    except RuntimeError as exc:
-        # numpy ↔ mlx bf16 buffer-protocol mismatch on mlx ≥ 0.31. Re-raise
+    except (RuntimeError, ValueError) as exc:
+        # numpy ↔ mlx bf16 buffer-protocol mismatch. The exception type is not
+        # stable across mlx versions — older builds raise RuntimeError, mlx
+        # 0.31.x raises ValueError ("'bfloat16' is not a valid PEP 3118 buffer
+        # format string") — so match on the message, not the class. Re-raise
         # anything else — don't swallow unrelated errors.
         if "buffer format string" not in str(exc):
             raise

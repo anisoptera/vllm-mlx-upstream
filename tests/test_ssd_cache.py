@@ -393,6 +393,25 @@ class TestLayerSerializer:
             == "supported_via_dequant_on_spill"
         )
 
+    def test_mx_to_numpy_safe_upcasts_a_real_bfloat16_array(self):
+        """Real bf16 mx.array, not a simulated exception.
+
+        The other bf16 tests raise the buffer-protocol error by hand, so they
+        pass regardless of which exception class mlx actually uses. That hid a
+        live bug: the handler caught only RuntimeError while mlx 0.31.x raises
+        ValueError ("'bfloat16' is not a valid PEP 3118 buffer format string"),
+        so every bf16 KV spill failed on current mlx. Drive the real array.
+        """
+        mx = pytest.importorskip("mlx.core")
+        from vllm_mlx.ssd_cache import _mx_to_numpy_safe
+
+        arr = mx.zeros((2, 3), dtype=mx.bfloat16)
+        np_arr, original_dtype = _mx_to_numpy_safe(arr)
+
+        assert original_dtype == "bfloat16"
+        assert np_arr.dtype == np.float32
+        assert np_arr.shape == (2, 3)
+
     def test_snapshot_layer_honors_original_dtype_sentinel(self):
         """When enqueue_spill's dequant path stashed a pre-cast dtype on the
         layer, snapshot_layer must surface it in the snapshot — without this,
