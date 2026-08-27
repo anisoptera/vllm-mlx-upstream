@@ -409,6 +409,7 @@ SERIALIZER_SUPPORT_MATRIX = {
     "RotatingKVCache": "supported",  # Serialized as KVCache (keys/values/offset)
     "ArraysCache": "supported",
     "MambaCache": "supported",  # Legacy name for ArraysCache
+    "CacheList": "supported",  # DSA (GLM-5.2/DeepSeek-V3.2): list of KVCache subs
     "_QuantizedCacheWrapper": "supported_via_dequant_on_spill",
     "QuantizedKVCache": "supported_via_dequant_on_spill",
 }
@@ -613,15 +614,136 @@ class ArraysCacheSerializer(LayerSerializer):
         return result
 
 
+class CacheListSerializer(LayerSerializer):
+    """Serializer for DSA ``CacheList`` layers (GLM-5.2 / DeepSeek-V3.2).
+
+    A ``CacheList`` wraps N sub-caches — for DSA each is a ``KVCache``:
+    ``(latent, indexer)`` for full layers, ``(latent,)`` for shared layers.
+    Below the sparse ``index_topk`` threshold the indexer sub-cache is empty
+    (size-0 arrays).
+
+    ``CacheList`` also exposes a list ``.state``, so the duck-typed dispatcher
+    used to mis-route it to ``ArraysCacheSerializer``. Depending on the mlx_lm
+    build that either crashed (``.state`` yields per-sub ``(keys, values)``
+    tuples that ``_mx_to_numpy_safe`` cannot handle) or silently flattened the
+    sub-caches and lost the CacheList structure. This serializer instead walks
+    ``layer.caches`` directly — independent of ``.state`` semantics — snapshots
+    each sub ``KVCache`` (reusing ``KVCacheSerializer``), flattens their arrays
+    into one safetensors file under ``sub_{j}_*`` keys, and records the per-sub
+    layout (offset, dtype hints, empty-array shapes) in metadata.
+    """
+
+    def snapshot_layer(self, layer: Any) -> dict[str, Any]:
+        sub_ser = KVCacheSerializer()
+        sub_snapshots = []
+        for sub in layer.caches:
+            if not (
+                hasattr(sub, "keys")
+                and hasattr(sub, "values")
+                and hasattr(sub, "offset")
+            ):
+                raise ValueError(
+                    f"CacheList sub-cache {type(sub).__name__} is not "
+                    "KVCache-like; unsupported for SSD spill"
+                )
+            sub_snapshots.append(sub_ser.snapshot_layer(sub))
+        return {"sub_snapshots": sub_snapshots}
+
+    def serialize_layer(
+        self, snapshot: dict[str, Any], layer_idx: int, file_path: str
+    ) -> dict[str, Any]:
+        from safetensors.numpy import save_file
+
+        sub_snapshots = snapshot["sub_snapshots"]
+        tensors: dict[str, np.ndarray] = {}
+        sub_meta: list[dict[str, Any]] = []
+        for j, sub in enumerate(sub_snapshots):
+            keys_np = sub["keys_np"]
+            values_np = sub["values_np"]
+            m: dict[str, Any] = {"offset": sub["offset"]}
+            # Size-0 arrays (empty DSA indexer) can't go through safetensors;
+            # record shape+dtype and recreate on load, like the disk-persist path.
+            if getattr(keys_np, "size", 1) == 0:
+                m["keys_empty"] = [list(keys_np.shape), str(keys_np.dtype)]
+            else:
+                tensors[f"sub_{j}_keys"] = keys_np
+            if getattr(values_np, "size", 1) == 0:
+                m["values_empty"] = [list(values_np.shape), str(values_np.dtype)]
+            else:
+                tensors[f"sub_{j}_values"] = values_np
+            for k in ("keys_original_dtype", "values_original_dtype"):
+                if k in sub:
+                    m[k] = sub[k]
+            for attr in KVCacheSerializer._ROTATING_ATTRS:
+                if attr in sub:
+                    m[attr] = sub[attr]
+            sub_meta.append(m)
+
+        if not tensors:
+            # safetensors rejects an empty tensor dict; write a sentinel. (The
+            # latent sub-cache is always populated, so this is a guard only.)
+            tensors["__placeholder__"] = np.zeros((1,), dtype=np.uint8)
+        save_file(tensors, file_path)
+
+        return {
+            "layer_type": "CacheList",
+            "layer_idx": layer_idx,
+            "sub_count": len(sub_snapshots),
+            "sub_meta": sub_meta,
+        }
+
+    def deserialize_layer(self, file_path: str, metadata: dict[str, Any]) -> dict:
+        from safetensors.numpy import load_file
+
+        sub_count = metadata["sub_count"]
+        sub_meta = metadata["sub_meta"]
+        tensors = load_file(file_path)
+
+        subs = []
+        for j in range(sub_count):
+            m = sub_meta[j]
+            kkey, vkey = f"sub_{j}_keys", f"sub_{j}_values"
+            if kkey in tensors:
+                keys = tensors[kkey]
+            else:
+                shape, dt = m["keys_empty"]
+                keys = np.zeros(shape, dtype=np.dtype(dt))
+            if vkey in tensors:
+                values = tensors[vkey]
+            else:
+                shape, dt = m["values_empty"]
+                values = np.zeros(shape, dtype=np.dtype(dt))
+
+            sub_ld: dict[str, Any] = {
+                "keys": keys,
+                "values": values,
+                "offset": m["offset"],
+            }
+            for k in ("keys_original_dtype", "values_original_dtype"):
+                if k in m:
+                    sub_ld[k] = m[k]
+            for attr in KVCacheSerializer._ROTATING_ATTRS:
+                if attr in m:
+                    sub_ld[attr] = m[attr]
+            subs.append(sub_ld)
+        return {"cachelist_subs": subs}
+
+
 def get_serializer_for_layer(layer: Any) -> LayerSerializer:
     """Return the appropriate serializer for a cache layer.
 
     Dispatches based on duck-typing:
+    - If layer has .caches (DSA CacheList) -> CacheListSerializer
     - If layer has .keys and .values and .offset -> KVCacheSerializer
     - If layer has .state and it's a list -> ArraysCacheSerializer
 
+    The CacheList check comes first because a CacheList ALSO has a list
+    ``.state`` and would otherwise be mis-routed to ArraysCacheSerializer.
+
     Raises ValueError for unsupported layer types.
     """
+    if isinstance(getattr(layer, "caches", None), (list, tuple)):
+        return CacheListSerializer()
     if hasattr(layer, "keys") and hasattr(layer, "values") and hasattr(layer, "offset"):
         return KVCacheSerializer()
     if hasattr(layer, "state") and isinstance(getattr(layer, "state", None), list):
@@ -1125,6 +1247,8 @@ class SSDCacheTier:
                     serializer = KVCacheSerializer()
                 elif layer_type in ("ArraysCache", "MambaCache"):
                     serializer = ArraysCacheSerializer()
+                elif layer_type == "CacheList":
+                    serializer = CacheListSerializer()
                 else:
                     logger.warning(
                         f"[ssd_cache] unknown layer type {layer_type}, skipping"

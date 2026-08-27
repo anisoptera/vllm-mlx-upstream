@@ -1246,3 +1246,140 @@ class TestIntegrationSpillAndFetch:
             assert stats["ssd_hits"] >= 1
             assert stats["reload_bytes"] > 0
             assert stats["avg_reload_latency_ms"] > 0
+
+
+class TestCacheListSpillRoundTrip:
+    """SSD spill must round-trip GLM-5.2 / DeepSeek-V3.2 DSA caches.
+
+    A DSA layer is ``CacheList(KVCache latent, KVCache indexer)`` (full layers)
+    or ``CacheList(KVCache latent)`` (shared layers). The indexer sub-cache is
+    empty below the sparse ``index_topk`` threshold. ``CacheList`` exposes a
+    list ``.state``, so the duck-typed dispatcher used to mis-route it to
+    ``ArraysCacheSerializer``; iterating ``.state`` then yields per-sub
+    ``(keys, values)`` tuples and ``_mx_to_numpy_safe`` choked
+    (``'tuple' object has no attribute 'dtype'``), dropping every entry. A
+    dedicated ``CacheListSerializer`` round-trips them.
+    """
+
+    def _make_dsa_cache(self):
+        import mlx.core as mx
+        from mlx_lm.models.cache import KVCache, CacheList
+
+        # Full layer: populated bf16 latent + empty (dense-mode) indexer.
+        lat = KVCache()
+        lat.update_and_fetch(
+            mx.random.normal((1, 4, 6, 16)).astype(mx.bfloat16),
+            mx.random.normal((1, 4, 6, 16)).astype(mx.bfloat16),
+        )
+        idx = KVCache()
+        idx.keys = mx.zeros((1, 4, 0, 16), dtype=mx.float32)
+        idx.values = mx.zeros((1, 4, 0, 16), dtype=mx.float32)
+        idx.offset = 0
+        full = CacheList(lat, idx)
+
+        # Shared layer: single latent sub-cache.
+        lat2 = KVCache()
+        lat2.update_and_fetch(
+            mx.random.normal((1, 4, 6, 16)).astype(mx.bfloat16),
+            mx.random.normal((1, 4, 6, 16)).astype(mx.bfloat16),
+        )
+        shared = CacheList(lat2)
+        return [full, shared], lat, lat2
+
+    def test_dispatch_picks_cachelist_serializer(self):
+        from vllm_mlx.ssd_cache import (
+            get_serializer_for_layer,
+            CacheListSerializer,
+            ArraysCacheSerializer,
+        )
+
+        cache, _, _ = self._make_dsa_cache()
+        s = get_serializer_for_layer(cache[0])
+        assert isinstance(s, CacheListSerializer)
+        assert not isinstance(s, ArraysCacheSerializer)
+
+    def test_cachelist_in_support_matrix(self):
+        from vllm_mlx.ssd_cache import SERIALIZER_SUPPORT_MATRIX
+
+        assert "CacheList" in SERIALIZER_SUPPORT_MATRIX
+
+    def test_snapshot_serialize_deserialize_round_trip(self, tmp_path):
+        from vllm_mlx.ssd_cache import get_serializer_for_layer
+
+        cache, lat, lat2 = self._make_dsa_cache()
+        ser = get_serializer_for_layer(cache[0])
+        path = str(tmp_path / "layer_0.safetensors")
+
+        snap = ser.snapshot_layer(cache[0])
+        meta = ser.serialize_layer(snap, 0, path)
+        assert meta["layer_type"] == "CacheList"
+        assert meta["sub_count"] == 2
+        assert os.path.exists(path)
+
+        ld = ser.deserialize_layer(path, meta)
+        assert "cachelist_subs" in ld
+        subs = ld["cachelist_subs"]
+        assert len(subs) == 2
+        # Latent: offset + data preserved.
+        assert subs[0]["offset"] == 6
+        # Empty indexer preserved.
+        assert subs[1]["offset"] == 0
+        assert np.array(subs[1]["keys"]).size == 0
+
+    def test_full_roundtrip_reconstructs_cachelist(self, tmp_path):
+        import types
+        import mlx.core as mx
+        from vllm_mlx.ssd_cache import get_serializer_for_layer
+        from vllm_mlx.scheduler import Scheduler
+
+        cache, lat, lat2 = self._make_dsa_cache()
+
+        # snapshot -> serialize -> deserialize each layer (what _read_entry does)
+        dicts = []
+        for i, layer in enumerate(cache):
+            ser = get_serializer_for_layer(layer)
+            path = str(tmp_path / f"layer_{i}.safetensors")
+            snap = ser.snapshot_layer(layer)
+            meta = ser.serialize_layer(snap, i, path)
+            dicts.append(ser.deserialize_layer(path, meta))
+
+        # reconstruct (scheduler) — method only touches module globals, so a
+        # dummy self is sufficient.
+        result = Scheduler._reconstruct_ssd_layers(types.SimpleNamespace(), dicts)
+        assert result is not None
+        assert [type(c).__name__ for c in result] == ["CacheList", "CacheList"]
+        assert [len(c.caches) for c in result] == [2, 1]
+
+        # Latent: dtype, offset, and data round-trip (bf16 -> fp32 -> bf16).
+        r_lat = result[0].caches[0]
+        assert str(r_lat.keys.dtype).endswith("bfloat16")
+        assert r_lat.offset == 6
+        assert bool(
+            mx.allclose(
+                r_lat.keys[..., :6, :].astype(mx.float32),
+                lat.keys[..., :6, :].astype(mx.float32),
+            )
+        )
+        # Empty indexer preserved.
+        assert result[0].caches[1].offset == 0
+        assert result[0].caches[1].keys.size == 0
+        # Shared-layer latent round-trips too.
+        assert result[1].caches[0].offset == 6
+        assert bool(
+            mx.allclose(
+                result[1].caches[0].keys[..., :6, :].astype(mx.float32),
+                lat2.keys[..., :6, :].astype(mx.float32),
+            )
+        )
+
+    def test_plain_kvcache_still_dispatches_to_kvcache(self):
+        """Regression: non-DSA plain KVCache must NOT hit the CacheList path."""
+        import mlx.core as mx
+        from mlx_lm.models.cache import KVCache
+        from vllm_mlx.ssd_cache import get_serializer_for_layer, KVCacheSerializer
+
+        layer = KVCache()
+        layer.update_and_fetch(
+            mx.random.normal((1, 4, 5, 16)), mx.random.normal((1, 4, 5, 16))
+        )
+        assert isinstance(get_serializer_for_layer(layer), KVCacheSerializer)
