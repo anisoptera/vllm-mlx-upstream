@@ -5334,3 +5334,22 @@ class TestDetectImplicitThinking:
 
         server._implicit_thinking_cache.clear()
         assert server._detect_implicit_thinking(object(), None) is False
+
+    def test_cache_is_bounded_against_client_supplied_template_kwargs(
+        self, monkeypatch
+    ):
+        """chat_template_kwargs is request-controlled, so the key space is too."""
+        import vllm_mlx.server as server
+
+        monkeypatch.setattr(server, "_IMPLICIT_THINKING_CACHE_MAX_SIZE", 8)
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        for n in range(50):
+            assert (
+                server._detect_implicit_thinking(
+                    engine, {"chat_template_kwargs": {"junk": n}}
+                )
+                is True
+            )
+        assert len(server._implicit_thinking_cache) == 8
+        server._implicit_thinking_cache.clear()

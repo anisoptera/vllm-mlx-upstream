@@ -1167,6 +1167,11 @@ def _build_reasoning_parser(engine: BaseEngine | None = None):
         return type(_reasoning_parser)()
 
 
+# Keyed partly on request-supplied chat_template_kwargs, so an adversarial or
+# merely varied client can mint unbounded entries. Bound it FIFO, same shape as
+# _responses_store above. Templates-per-model is tiny in practice; this is a
+# safety net, not a working-set limit.
+_IMPLICIT_THINKING_CACHE_MAX_SIZE: int = 256
 _implicit_thinking_cache: dict[tuple, bool] = {}
 
 
@@ -1182,6 +1187,11 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     probed once per (model, chat_template_kwargs) with a throwaway message
     and cached -- rendering the real prompt on every request would put a
     second template application in the hot path.
+
+    The probe renders without ``tools``, so a template that only opens
+    ``<think>`` when tools are present would be misread. GLM-5.3 opens it
+    unconditionally (verified live: tool-call requests still split reasoning
+    from content correctly), so the probe is sound for the models we ship.
     """
     apply_template = getattr(engine, "_apply_chat_template", None)
     if apply_template is None:
@@ -1206,6 +1216,8 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
 
     result = bool(prompt) and prompt.rstrip().endswith("<think>")
     _implicit_thinking_cache[key] = result
+    while len(_implicit_thinking_cache) > _IMPLICIT_THINKING_CACHE_MAX_SIZE:
+        _implicit_thinking_cache.pop(next(iter(_implicit_thinking_cache)))
     return result
 
 
