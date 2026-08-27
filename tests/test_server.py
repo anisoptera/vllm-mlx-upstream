@@ -2046,7 +2046,7 @@ class TestStreamChatCompletion:
             def __init__(self, tokenizer=None):
                 self.in_think = False
 
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 self.in_think = False
 
             def extract_reasoning_streaming(
@@ -2874,7 +2874,7 @@ class TestStreamChatCompletion:
                     yield chunk
 
         class FakeReasoningParser:
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 self._in_reasoning = False
 
             def extract_reasoning_streaming(
@@ -3111,7 +3111,7 @@ class TestStreamChatCompletion:
                     yield chunk
 
         class FakeReasoningParser:
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 pass
 
             def extract_reasoning_streaming(
@@ -3275,7 +3275,7 @@ class TestStreamChatCompletion:
                 )
 
         class FakeReasoningParser:
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 pass
 
             def extract_reasoning_streaming(
@@ -3354,7 +3354,7 @@ class TestStreamChatCompletion:
                     yield chunk
 
         class FakeReasoningParser:
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 pass
 
             def extract_reasoning_streaming(
@@ -3469,7 +3469,7 @@ class TestStreamChatCompletion:
                     yield chunk
 
         class FakeReasoningParser:
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 self._in_reasoning = False
 
             def extract_reasoning_streaming(
@@ -3559,7 +3559,7 @@ class TestStreamChatCompletion:
                 )
 
         class ReasoningOnlyParser:
-            def reset_state(self):
+            def reset_state(self, implicit_mode: bool = False):
                 pass
 
             def extract_reasoning_streaming(
@@ -5271,3 +5271,66 @@ def pytest_addoption(parser):
         default="http://localhost:8000",
         help="URL of the vllm-mlx server for integration tests",
     )
+
+
+class TestDetectImplicitThinking:
+    """The probe that tells the streaming parser a <think> was injected."""
+
+    class _Engine:
+        model_name = "glm-5.3-flash"
+
+        def __init__(self, rendered):
+            self._rendered = rendered
+            self.calls = 0
+
+        def _apply_chat_template(self, messages, **kwargs):
+            self.calls += 1
+            return self._rendered
+
+    def _detect(self, engine, chat_kwargs=None):
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        return server._detect_implicit_thinking(engine, chat_kwargs)
+
+    def test_trailing_think_tag_is_implicit(self):
+        assert self._detect(self._Engine("<|user|>hi<|assistant|>\n<think>")) is True
+
+    def test_trailing_whitespace_after_tag_still_counts(self):
+        assert self._detect(self._Engine("<|assistant|>\n<think>\n  ")) is True
+
+    def test_template_without_injected_tag_is_not_implicit(self):
+        assert self._detect(self._Engine("<|user|>hi<|assistant|>\n")) is False
+
+    def test_think_elsewhere_in_prompt_does_not_count(self):
+        """Only a TRAILING <think> means generation starts inside the block."""
+        engine = self._Engine("<|user|>what is <think> for?<|assistant|>\n")
+        assert self._detect(engine) is False
+
+    def test_result_is_cached_per_model(self):
+        import vllm_mlx.server as server
+
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._implicit_thinking_cache.clear()
+        assert server._detect_implicit_thinking(engine, None) is True
+        assert server._detect_implicit_thinking(engine, None) is True
+        assert engine.calls == 1, "template should be rendered once, not per request"
+
+    def test_render_failure_is_not_cached_and_defaults_false(self):
+        import vllm_mlx.server as server
+
+        class Boom:
+            model_name = "boom"
+
+            def _apply_chat_template(self, messages, **kwargs):
+                raise RuntimeError("no template")
+
+        server._implicit_thinking_cache.clear()
+        assert server._detect_implicit_thinking(Boom(), None) is False
+        assert server._implicit_thinking_cache == {}
+
+    def test_engine_without_template_hook_defaults_false(self):
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        assert server._detect_implicit_thinking(object(), None) is False

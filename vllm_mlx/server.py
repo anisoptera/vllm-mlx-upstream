@@ -1167,6 +1167,48 @@ def _build_reasoning_parser(engine: BaseEngine | None = None):
         return type(_reasoning_parser)()
 
 
+_implicit_thinking_cache: dict[tuple, bool] = {}
+
+
+def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> bool:
+    """Return True iff the chat template injects an open ``<think>``.
+
+    GLM-5.2/5.3 templates end the rendered prompt with ``<think>``, so
+    generation starts INSIDE the reasoning block and the model only ever
+    emits the closing tag. A streaming parser that defaults untagged output
+    to content would put the whole chain-of-thought in ``content``.
+
+    This is a property of the template, not of the conversation, so it is
+    probed once per (model, chat_template_kwargs) with a throwaway message
+    and cached -- rendering the real prompt on every request would put a
+    second template application in the hot path.
+    """
+    apply_template = getattr(engine, "_apply_chat_template", None)
+    if apply_template is None:
+        return False
+
+    ctk = (chat_kwargs or {}).get("chat_template_kwargs") or {}
+    key = (getattr(engine, "model_name", None), repr(sorted(ctk.items())))
+    cached = _implicit_thinking_cache.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        prompt = apply_template(
+            [{"role": "user", "content": "hi"}],
+            chat_template_kwargs=dict(ctk) or None,
+        )
+    except Exception:
+        # A template that won't render for the probe is not evidence either
+        # way -- don't cache, and leave the existing default in place.
+        logger.debug("implicit-thinking probe failed", exc_info=True)
+        return False
+
+    result = bool(prompt) and prompt.rstrip().endswith("<think>")
+    _implicit_thinking_cache[key] = result
+    return result
+
+
 def _prepare_streaming_reasoning_parser(
     engine: BaseEngine,
     request: ChatCompletionRequest | ResponsesRequest | None,
@@ -1179,7 +1221,9 @@ def _prepare_streaming_reasoning_parser(
         return None
     parser = _build_reasoning_parser(engine)
     if parser is not None:
-        parser.reset_state()
+        parser.reset_state(
+            implicit_mode=_detect_implicit_thinking(engine, chat_kwargs)
+        )
     return parser
 
 

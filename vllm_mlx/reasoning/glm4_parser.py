@@ -98,7 +98,17 @@ class Glm4ReasoningParser(BaseThinkingReasoningParser):
                     previous_text, current_text, delta_text
                 )
 
-            # No tags yet — GLM-4 doesn't inject <think>, so this is content
+            # No tags yet. Autonomous GLM-4.6-style output is content, but a
+            # template that injected an open <think> (GLM-5.2/5.3) starts the
+            # model INSIDE the reasoning block, so untagged text is reasoning
+            # until </think> arrives. Without this the whole chain-of-thought
+            # is emitted as content, glued to the answer -- and the streaming
+            # result disagrees with what extract_reasoning() returns for the
+            # very same output.
+            if self._implicit_mode:
+                return super().extract_reasoning_streaming(
+                    previous_text, current_text, delta_text
+                )
             return DeltaMessage(content=delta_text)
 
         # In thinking or content phase, delegate to base class
