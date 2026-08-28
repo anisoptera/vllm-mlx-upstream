@@ -1192,22 +1192,36 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     ``<think>`` when tools are present would be misread. GLM-5.3 opens it
     unconditionally (verified live: tool-call requests still split reasoning
     from content correctly), so the probe is sound for the models we ship.
+
+    ``enable_thinking`` is forwarded and keyed on because it is resolved
+    per-request: ``_apply_forced_tool_choice`` sets it to ``False`` on
+    ``chat_kwargs`` directly, not inside ``chat_template_kwargs``. Probing
+    without it would let the engine default (``"coder" not in model_name``)
+    disagree with the flag the real prompt render is about to use.
     """
     apply_template = getattr(engine, "_apply_chat_template", None)
     if apply_template is None:
         return False
 
     ctk = (chat_kwargs or {}).get("chat_template_kwargs") or {}
-    key = (getattr(engine, "model_name", None), repr(sorted(ctk.items())))
+    # Absent means "let the engine pick its default", which is not the same as
+    # False -- forward only what the request actually resolved.
+    enable_thinking = (chat_kwargs or {}).get("enable_thinking")
+    key = (
+        getattr(engine, "model_name", None),
+        repr(sorted(ctk.items())),
+        enable_thinking,
+    )
     cached = _implicit_thinking_cache.get(key)
     if cached is not None:
         return cached
 
+    probe_kwargs: dict[str, object] = {"chat_template_kwargs": dict(ctk) or None}
+    if enable_thinking is not None:
+        probe_kwargs["enable_thinking"] = enable_thinking
+
     try:
-        prompt = apply_template(
-            [{"role": "user", "content": "hi"}],
-            chat_template_kwargs=dict(ctk) or None,
-        )
+        prompt = apply_template([{"role": "user", "content": "hi"}], **probe_kwargs)
     except Exception:
         # A template that won't render for the probe is not evidence either
         # way -- don't cache, and leave the existing default in place.

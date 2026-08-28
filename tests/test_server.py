@@ -5282,9 +5282,13 @@ class TestDetectImplicitThinking:
         def __init__(self, rendered):
             self._rendered = rendered
             self.calls = 0
+            self.seen_kwargs = []
 
         def _apply_chat_template(self, messages, **kwargs):
             self.calls += 1
+            self.seen_kwargs.append(kwargs)
+            if callable(self._rendered):
+                return self._rendered(kwargs)
             return self._rendered
 
     def _detect(self, engine, chat_kwargs=None):
@@ -5352,4 +5356,62 @@ class TestDetectImplicitThinking:
                 is True
             )
         assert len(server._implicit_thinking_cache) == 8
+        server._implicit_thinking_cache.clear()
+
+    def test_probe_renders_with_the_resolved_enable_thinking(self):
+        """The probe must see the same flag the real prompt render will get."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._detect_implicit_thinking(engine, {"enable_thinking": False})
+        assert engine.seen_kwargs[-1].get("enable_thinking") is False
+        server._implicit_thinking_cache.clear()
+
+    def test_enable_thinking_omitted_when_request_does_not_set_it(self):
+        """Absent means 'let the engine default decide', not False."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._detect_implicit_thinking(engine, {})
+        assert "enable_thinking" not in engine.seen_kwargs[-1]
+        server._implicit_thinking_cache.clear()
+
+    def test_enable_thinking_is_part_of_the_cache_key(self):
+        """A template that honours the flag must not reuse the other verdict.
+
+        _apply_forced_tool_choice sets chat_kwargs["enable_thinking"] = False
+        without touching chat_template_kwargs, so keying on the latter alone
+        would serve a forced-tool request the thinking-enabled verdict.
+        """
+        import vllm_mlx.server as server
+
+        def render(kwargs):
+            if kwargs.get("enable_thinking") is False:
+                return "<|assistant|>\n"
+            return "<|assistant|>\n<think>"
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine(render)
+        assert server._detect_implicit_thinking(engine, None) is True
+        forced = {"enable_thinking": False}
+        assert server._detect_implicit_thinking(engine, forced) is False
+        assert engine.calls == 2, "the two flags must not share a cache entry"
+        assert server._detect_implicit_thinking(engine, forced) is False
+        assert engine.calls == 2, "each flag is still cached"
+        server._implicit_thinking_cache.clear()
+
+    def test_template_ignoring_the_flag_stays_implicit(self):
+        """GLM-5.3 opens <think> unconditionally, so forced tools stay implicit.
+
+        Its chat template has no enable_thinking variable at all, so disabling
+        thinking must NOT flip the verdict -- the prompt still starts inside
+        the reasoning block and the parser still has to route accordingly.
+        """
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        assert server._detect_implicit_thinking(engine, {"enable_thinking": False})
         server._implicit_thinking_cache.clear()

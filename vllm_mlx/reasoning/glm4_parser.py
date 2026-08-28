@@ -102,9 +102,13 @@ class Glm4ReasoningParser(BaseThinkingReasoningParser):
             # template that injected an open <think> (GLM-5.2/5.3) starts the
             # model INSIDE the reasoning block, so untagged text is reasoning
             # until </think> arrives. Without this the whole chain-of-thought
-            # is emitted as content, glued to the answer -- and the streaming
-            # result disagrees with what extract_reasoning() returns for the
-            # very same output.
+            # is emitted as content, glued to the answer.
+            #
+            # This does not make streaming agree with extract_reasoning() in
+            # every case: the non-streaming path has no implicit-mode signal,
+            # so output truncated before </think> still lands in content there
+            # and in reasoning here. Fixing that needs the flag threaded into
+            # extract_reasoning() as well.
             if self._implicit_mode:
                 return super().extract_reasoning_streaming(
                     previous_text, current_text, delta_text

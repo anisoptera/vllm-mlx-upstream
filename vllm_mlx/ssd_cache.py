@@ -158,11 +158,19 @@ class SSDIndex:
     The SQLite connection uses WAL mode for concurrent read/write safety.
     """
 
-    _SCHEMA_VERSION = 1
+    # 2: CacheList (GLM-5.2/5.3 DSA) layers gained a dedicated serializer.
+    #    Before it, they were mis-dispatched to ArraysCacheSerializer; with
+    #    fp16 that silently succeeded, writing an entry tagged
+    #    layer_type="ArraysCache" with the per-sub offsets lost. Those entries
+    #    still match on token hash after an upgrade, so they must be dropped.
+    _SCHEMA_VERSION = 2
 
     def __init__(self, cache_dir: str) -> None:
         self._cache_dir = cache_dir
         self._db_lock = threading.Lock()
+        # Set to the previous version when an incompatible index was purged,
+        # so the tier knows to clear the matching data directories.
+        self.migrated_from: int | None = None
         db_path = os.path.join(cache_dir, "index.db")
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -200,12 +208,27 @@ class SSDIndex:
             CREATE INDEX IF NOT EXISTS idx_entries_prefix_hash_num_tokens
                 ON entries(prefix_hash, num_tokens);
             """)
-        # Insert schema version if not present
-        cur = self._conn.execute("SELECT COUNT(*) FROM schema_version")
-        if cur.fetchone()[0] == 0:
+        # Insert schema version if not present, or drop an index written by an
+        # older, incompatible build. Entries are keyed on the token hash alone
+        # and the cache dir is not build-namespaced, so a stale entry would
+        # otherwise be served to a reader that cannot interpret it.
+        cur = self._conn.execute("SELECT version FROM schema_version")
+        row = cur.fetchone()
+        if row is None:
             self._conn.execute(
                 "INSERT INTO schema_version (version) VALUES (?)",
                 (self._SCHEMA_VERSION,),
+            )
+        elif row[0] != self._SCHEMA_VERSION:
+            self.migrated_from = row[0]
+            self._conn.execute("DELETE FROM entries")
+            self._conn.execute(
+                "UPDATE schema_version SET version = ?", (self._SCHEMA_VERSION,)
+            )
+            logger.info(
+                "[ssd_cache] index schema %s -> %s: dropped all entries",
+                row[0],
+                self._SCHEMA_VERSION,
             )
         self._backfill_prefix_hashes()
         self._conn.commit()
@@ -795,6 +818,8 @@ class SSDCacheTier:
         try:
             # Open SQLite index
             self._index = SSDIndex(self._cache_dir)
+            if getattr(self._index, "migrated_from", None) is not None:
+                self._purge_data_dir()
 
             # Stats
             self._stats = SSDCacheStats()
@@ -822,6 +847,31 @@ class SSDCacheTier:
                         "ssd_cache: failed to close index during init cleanup"
                     )
             raise
+
+    def _purge_data_dir(self) -> None:
+        """Delete every spilled entry after an incompatible schema bump.
+
+        The index rows are already gone, so reconcile() would eventually sweep
+        these as orphans -- but reconcile is not guaranteed to run before the
+        first spill, and leaving gigabytes of unreadable files on disk counting
+        against the size budget is worse than a short startup cost.
+        """
+        import shutil
+
+        if not os.path.isdir(self._data_dir):
+            return
+        for entry_name in os.listdir(self._data_dir):
+            entry_path = os.path.join(self._data_dir, entry_name)
+            if not os.path.isdir(entry_path):
+                continue
+            try:
+                shutil.rmtree(entry_path)
+            except OSError:
+                logger.warning(
+                    "[ssd_cache] failed to remove stale entry directory %s",
+                    entry_name,
+                    exc_info=True,
+                )
 
     @staticmethod
     def _entry_hash(tokens: tuple[int, ...]) -> str:

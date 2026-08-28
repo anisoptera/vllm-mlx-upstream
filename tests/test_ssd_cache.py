@@ -164,9 +164,10 @@ class TestSSDIndex:
 
         os.makedirs(db_dir, exist_ok=True)
         conn = sqlite3.connect(os.path.join(db_dir, "index.db"))
-        conn.executescript("""
+        conn.executescript(f"""
             CREATE TABLE schema_version (version INTEGER NOT NULL);
-            INSERT INTO schema_version (version) VALUES (1);
+            INSERT INTO schema_version (version)
+                VALUES ({SSDIndex._SCHEMA_VERSION});
             CREATE TABLE entries (
                 token_hash   TEXT PRIMARY KEY,
                 tokens_blob  BLOB NOT NULL,
@@ -1402,3 +1403,115 @@ class TestCacheListSpillRoundTrip:
             mx.random.normal((1, 4, 5, 16)), mx.random.normal((1, 4, 5, 16))
         )
         assert isinstance(get_serializer_for_layer(layer), KVCacheSerializer)
+
+
+class TestSchemaVersionInvalidation:
+    """A schema bump must drop entries written by an incompatible build.
+
+    Motivating case: before CacheList got a dedicated serializer, a GLM-5.2/5.3
+    DSA layer was mis-dispatched to ArraysCacheSerializer. With bf16 that raised
+    and the entry was dropped, but with fp16 ``np.array((keys, values))`` stacks
+    cleanly, so the spill was *written* -- tagged ``layer_type: "ArraysCache"``
+    and missing the per-sub offsets. ``_entry_hash`` is the token hash alone and
+    the cache dir is not build-namespaced, so such an entry still matches after
+    the upgrade and reconstructs into an ArraysCache the DSA model cannot use.
+    """
+
+    @staticmethod
+    def _seed(cache_dir, version):
+        import sqlite3
+        import time
+
+        from vllm_mlx import ssd_cache as ssd_cache_module
+
+        data_dir = os.path.join(cache_dir, "data")
+        os.makedirs(data_dir, exist_ok=True)
+        tokens = (1, 2, 3)
+        entry_dir = os.path.join(data_dir, ssd_cache_module._tokens_hash(tokens))
+        os.makedirs(entry_dir, exist_ok=True)
+        with open(os.path.join(entry_dir, "manifest.json"), "w") as fh:
+            fh.write('{"layers": [{"layer_type": "ArraysCache"}]}')
+
+        conn = sqlite3.connect(os.path.join(cache_dir, "index.db"))
+        conn.executescript("""
+            CREATE TABLE schema_version (version INTEGER NOT NULL);
+            CREATE TABLE entries (
+                token_hash   TEXT PRIMARY KEY,
+                tokens_blob  BLOB NOT NULL,
+                prefix_hash  TEXT,
+                num_tokens   INTEGER NOT NULL,
+                file_path    TEXT NOT NULL,
+                memory_bytes INTEGER NOT NULL,
+                created_at   REAL NOT NULL,
+                accessed_at  REAL NOT NULL
+            );
+            """)
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+        now = time.time()
+        conn.execute(
+            "INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                ssd_cache_module._tokens_hash(tokens),
+                ssd_cache_module._tokens_to_blob(tokens),
+                ssd_cache_module._prefix_hash(tokens),
+                len(tokens),
+                ssd_cache_module._tokens_hash(tokens),
+                1000,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return tokens, entry_dir
+
+    def test_older_schema_version_drops_every_entry(self, tmp_path):
+        cache_dir = str(tmp_path / "cache")
+        tokens, _ = self._seed(cache_dir, SSDIndex._SCHEMA_VERSION - 1)
+
+        idx = SSDIndex(cache_dir)
+        try:
+            assert idx.migrated_from == SSDIndex._SCHEMA_VERSION - 1
+            assert idx.get_entry_count() == 0
+            assert idx.lookup_exact(tokens) is None
+            with idx._db_lock:
+                cur = idx._conn.execute("SELECT version FROM schema_version")
+                assert cur.fetchone()[0] == SSDIndex._SCHEMA_VERSION
+        finally:
+            idx.close()
+
+    def test_current_schema_version_keeps_entries(self, tmp_path):
+        cache_dir = str(tmp_path / "cache")
+        tokens, _ = self._seed(cache_dir, SSDIndex._SCHEMA_VERSION)
+
+        idx = SSDIndex(cache_dir)
+        try:
+            assert idx.migrated_from is None
+            assert idx.lookup_exact(tokens) is not None
+        finally:
+            idx.close()
+
+    def test_tier_removes_stale_data_dirs_on_migration(self, tmp_path):
+        from vllm_mlx.ssd_cache import SSDCacheTier
+
+        cache_dir = str(tmp_path / "cache")
+        _, entry_dir = self._seed(cache_dir, SSDIndex._SCHEMA_VERSION - 1)
+        assert os.path.isdir(entry_dir)
+
+        tier = SSDCacheTier(SSDCacheConfig(cache_dir=cache_dir))
+        try:
+            assert not os.path.exists(entry_dir), (
+                "stale spill files must not survive a schema bump"
+            )
+            assert os.path.isdir(os.path.join(cache_dir, "data"))
+        finally:
+            tier.close()
+
+    def test_fresh_cache_dir_is_not_treated_as_a_migration(self, tmp_path):
+        cache_dir = str(tmp_path / "cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        idx = SSDIndex(cache_dir)
+        try:
+            assert idx.migrated_from is None
+        finally:
+            idx.close()
