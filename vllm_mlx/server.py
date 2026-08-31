@@ -1175,6 +1175,22 @@ _IMPLICIT_THINKING_CACHE_MAX_SIZE: int = 256
 _implicit_thinking_cache: dict[tuple, bool] = {}
 
 
+def _tool_signature(tools: list | None) -> tuple[str, ...] | None:
+    """Stable, low-cardinality identity for a request's tool set.
+
+    Used in the implicit-thinking cache key. Tool *names* are what a chat
+    template can plausibly branch on; ordering is normalized so two requests
+    offering the same tools in a different order share one entry.
+    """
+    if not tools:
+        return None
+    names = []
+    for tool in tools:
+        name = _tool_name(tool) if isinstance(tool, dict) else None
+        names.append(name or repr(tool))
+    return tuple(sorted(names))
+
+
 def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> bool:
     """Return True iff the chat template injects an open ``<think>``.
 
@@ -1188,10 +1204,13 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     and cached -- rendering the real prompt on every request would put a
     second template application in the hot path.
 
-    The probe renders without ``tools``, so a template that only opens
-    ``<think>`` when tools are present would be misread. GLM-5.3 opens it
-    unconditionally (verified live: tool-call requests still split reasoning
-    from content correctly), so the probe is sound for the models we ship.
+    ``tools`` are forwarded and keyed on: a template may gate the ``<think>``
+    injection on tool presence, and ``chat_kwargs["tools"]`` is per-request.
+    The key carries the sorted tool *names*, not the full schemas -- enough to
+    separate "tools" from "no tools" and one tool set from another, without
+    minting a fresh entry (and a fresh template render) for every argument
+    schema a client happens to send. A template that opened ``<think>`` based
+    on a tool's *parameters* rather than its name would still be misread.
 
     ``enable_thinking`` is forwarded and keyed on because it is resolved
     per-request: ``_apply_forced_tool_choice`` sets it to ``False`` on
@@ -1207,10 +1226,12 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     # Absent means "let the engine pick its default", which is not the same as
     # False -- forward only what the request actually resolved.
     enable_thinking = (chat_kwargs or {}).get("enable_thinking")
+    tools = (chat_kwargs or {}).get("tools") or None
     key = (
         getattr(engine, "model_name", None),
         repr(sorted(ctk.items())),
         enable_thinking,
+        _tool_signature(tools),
     )
     cached = _implicit_thinking_cache.get(key)
     if cached is not None:
@@ -1219,6 +1240,8 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     probe_kwargs: dict[str, object] = {"chat_template_kwargs": dict(ctk) or None}
     if enable_thinking is not None:
         probe_kwargs["enable_thinking"] = enable_thinking
+    if tools:
+        probe_kwargs["tools"] = tools
 
     try:
         prompt = apply_template([{"role": "user", "content": "hi"}], **probe_kwargs)
@@ -1247,9 +1270,7 @@ def _prepare_streaming_reasoning_parser(
         return None
     parser = _build_reasoning_parser(engine)
     if parser is not None:
-        parser.reset_state(
-            implicit_mode=_detect_implicit_thinking(engine, chat_kwargs)
-        )
+        parser.reset_state(implicit_mode=_detect_implicit_thinking(engine, chat_kwargs))
     return parser
 
 

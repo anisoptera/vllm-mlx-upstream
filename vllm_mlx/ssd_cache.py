@@ -504,6 +504,22 @@ class KVCacheSerializer(LayerSerializer):
     _ROTATING_ATTRS = ("max_size", "keep", "step", "_idx")
 
     def snapshot_layer(self, layer: Any) -> dict[str, Any]:
+        # A KVCache leaves keys/values None until its first update_and_fetch.
+        # np.array(None) is a 0-d *object* array whose .size is 1, so it slips
+        # past serialize_layer's empty-array branch and only fails inside
+        # save_file ("dtype object is not covered") -- on the writer thread,
+        # where _writer_loop swallows the error and orphans the .tmp dir. Fail
+        # here instead: the same entry is dropped, but loudly and locally.
+        # NOTE: a size-0 array is NOT None -- the dense-mode DSA indexer is
+        # empty but materialized, and must still round-trip.
+        if (
+            getattr(layer, "keys", None) is None
+            or getattr(layer, "values", None) is None
+        ):
+            raise ValueError(
+                f"{type(layer).__name__} keys/values are not materialized "
+                "(None); layer cannot be spilled to SSD"
+            )
         keys_np, keys_orig_dtype = _mx_to_numpy_safe(layer.keys)
         values_np, values_orig_dtype = _mx_to_numpy_safe(layer.values)
 

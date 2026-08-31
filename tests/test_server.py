@@ -5415,3 +5415,120 @@ class TestDetectImplicitThinking:
         engine = self._Engine("<|assistant|>\n<think>")
         assert server._detect_implicit_thinking(engine, {"enable_thinking": False})
         server._implicit_thinking_cache.clear()
+
+    # --- tools ------------------------------------------------------------
+    #
+    # The probe used to render without `tools` while the real prompt render
+    # gets them from chat_kwargs["tools"], and the cache key ignored them --
+    # so a template whose <think> injection is tool-conditional could cache
+    # the no-tool verdict and serve it to a tool request.
+
+    _TOOL_A = {
+        "type": "function",
+        "function": {"name": "get_weather", "parameters": {"type": "object"}},
+    }
+    _TOOL_B = {
+        "type": "function",
+        "function": {"name": "send_email", "parameters": {"type": "object"}},
+    }
+
+    def test_probe_forwards_tools_to_the_template(self):
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._detect_implicit_thinking(engine, {"tools": [self._TOOL_A]})
+        assert engine.seen_kwargs[-1].get("tools") == [self._TOOL_A]
+        server._implicit_thinking_cache.clear()
+
+    def test_no_tools_leaves_the_kwarg_out(self):
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._detect_implicit_thinking(engine, {})
+        assert "tools" not in engine.seen_kwargs[-1]
+        server._implicit_thinking_cache.clear()
+
+    def test_tool_conditional_template_is_not_served_the_no_tool_verdict(self):
+        """The reviewer's scenario: <think> only opens when tools are absent."""
+        import vllm_mlx.server as server
+
+        def render(kwargs):
+            if kwargs.get("tools"):
+                return "<|assistant|>\n"
+            return "<|assistant|>\n<think>"
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine(render)
+        assert server._detect_implicit_thinking(engine, None) is True
+        assert server._detect_implicit_thinking(engine, {"tools": [self._TOOL_A]}) is (
+            False
+        )
+        assert engine.calls == 2, "tools must not share the no-tool cache entry"
+        server._implicit_thinking_cache.clear()
+
+    def test_verdict_is_cached_per_tool_set(self):
+        """Same tool names reuse the entry; a different set re-probes."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._detect_implicit_thinking(engine, {"tools": [self._TOOL_A]})
+        server._detect_implicit_thinking(engine, {"tools": [self._TOOL_A]})
+        assert engine.calls == 1, "identical tool sets must hit the cache"
+        server._detect_implicit_thinking(engine, {"tools": [self._TOOL_B]})
+        assert engine.calls == 2, "a different tool set must re-probe"
+        server._implicit_thinking_cache.clear()
+
+    def test_tool_order_does_not_split_the_cache_entry(self):
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        server._detect_implicit_thinking(
+            engine, {"tools": [self._TOOL_A, self._TOOL_B]}
+        )
+        server._detect_implicit_thinking(
+            engine, {"tools": [self._TOOL_B, self._TOOL_A]}
+        )
+        assert engine.calls == 1
+        server._implicit_thinking_cache.clear()
+
+    def test_forced_tool_choice_context_stays_implicit_on_glm53(self):
+        """Forced tool choice: tools filtered to one AND enable_thinking=False.
+
+        GLM-5.3 opens <think> regardless, so the verdict must stay True --
+        this is the exact combination _apply_forced_tool_choice produces.
+        """
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        forced = {"tools": [self._TOOL_A], "enable_thinking": False}
+        assert server._detect_implicit_thinking(engine, forced) is True
+        assert engine.seen_kwargs[-1].get("tools") == [self._TOOL_A]
+        assert engine.seen_kwargs[-1].get("enable_thinking") is False
+        server._implicit_thinking_cache.clear()
+
+    def test_cache_bound_holds_as_tool_sets_vary(self, monkeypatch):
+        """tools are request-controlled too, so they must not evade the bound."""
+        import vllm_mlx.server as server
+
+        monkeypatch.setattr(server, "_IMPLICIT_THINKING_CACHE_MAX_SIZE", 8)
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        for n in range(50):
+            tool = {"type": "function", "function": {"name": f"tool_{n}"}}
+            assert server._detect_implicit_thinking(engine, {"tools": [tool]}) is True
+        assert len(server._implicit_thinking_cache) == 8
+        server._implicit_thinking_cache.clear()
+
+    def test_malformed_tool_entries_do_not_break_the_probe(self):
+        """tools come from a client-shaped list; a stray non-dict must not 500."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>")
+        assert server._detect_implicit_thinking(engine, {"tools": ["nonsense", None]})
+        server._implicit_thinking_cache.clear()

@@ -1500,9 +1500,9 @@ class TestSchemaVersionInvalidation:
 
         tier = SSDCacheTier(SSDCacheConfig(cache_dir=cache_dir))
         try:
-            assert not os.path.exists(entry_dir), (
-                "stale spill files must not survive a schema bump"
-            )
+            assert not os.path.exists(
+                entry_dir
+            ), "stale spill files must not survive a schema bump"
             assert os.path.isdir(os.path.join(cache_dir, "data"))
         finally:
             tier.close()
@@ -1515,3 +1515,92 @@ class TestSchemaVersionInvalidation:
             assert idx.migrated_from is None
         finally:
             idx.close()
+
+
+class TestUnsupportedSubCaches:
+    """A layer that cannot be spilled must fail loudly, not write junk.
+
+    ``snapshot_layer`` runs on the *writer* thread, where ``_writer_loop``
+    catches and logs. A guard that raises there costs one dropped entry and a
+    log line. Getting past the guard is worse: ``np.array(None)`` is a 0-d
+    object array whose ``.size`` is 1, so it slips past the ``keys_empty``
+    branch and only fails later in ``save_file`` ("dtype object is not
+    covered") -- same dropped entry, but with an orphaned .tmp directory and a
+    much less obvious message.
+    """
+
+    def _cache_list(self, *subs):
+        from mlx_lm.models.cache import CacheList
+
+        return CacheList(*subs)
+
+    def _populated_kv(self):
+        import mlx.core as mx
+        from mlx_lm.models.cache import KVCache
+
+        kv = KVCache()
+        kv.update_and_fetch(
+            mx.random.normal((1, 2, 4, 8)), mx.random.normal((1, 2, 4, 8))
+        )
+        return kv
+
+    def test_unpopulated_sub_cache_raises(self):
+        """KVCache leaves keys/values None until the first update_and_fetch."""
+        from mlx_lm.models.cache import KVCache
+        from vllm_mlx.ssd_cache import CacheListSerializer
+
+        layer = self._cache_list(self._populated_kv(), KVCache())
+        with pytest.raises(ValueError, match="not materialized"):
+            CacheListSerializer().snapshot_layer(layer)
+
+    def test_unpopulated_plain_kvcache_raises(self):
+        """Same guard protects a non-CacheList layer -- one invariant, one place."""
+        from mlx_lm.models.cache import KVCache
+        from vllm_mlx.ssd_cache import KVCacheSerializer
+
+        with pytest.raises(ValueError, match="not materialized"):
+            KVCacheSerializer().snapshot_layer(KVCache())
+
+    def test_empty_but_materialized_sub_cache_is_still_supported(self):
+        """Regression guard: the DSA indexer is size-0, NOT None.
+
+        The None check must not start rejecting the empty dense-mode indexer,
+        which is a normal, spillable state.
+        """
+        import mlx.core as mx
+        from mlx_lm.models.cache import KVCache
+        from vllm_mlx.ssd_cache import CacheListSerializer
+
+        idx = KVCache()
+        idx.keys = mx.zeros((1, 2, 0, 8), dtype=mx.float32)
+        idx.values = mx.zeros((1, 2, 0, 8), dtype=mx.float32)
+        idx.offset = 0
+
+        snap = CacheListSerializer().snapshot_layer(
+            self._cache_list(self._populated_kv(), idx)
+        )
+        assert len(snap["sub_snapshots"]) == 2
+        assert snap["sub_snapshots"][1]["keys_np"].size == 0
+
+    def test_non_kvcache_sub_is_rejected_by_type(self):
+        """A sub-cache without the KVCache shape has no serializer at all."""
+        from vllm_mlx.ssd_cache import CacheListSerializer
+
+        class Alien:
+            pass
+
+        layer = self._cache_list(self._populated_kv(), Alien())
+        with pytest.raises(ValueError, match="not.*KVCache-like|unsupported"):
+            CacheListSerializer().snapshot_layer(layer)
+
+    def test_rejected_layer_writes_no_file(self, tmp_path):
+        """The guard fires before serialize_layer, so nothing lands on disk."""
+        from mlx_lm.models.cache import KVCache
+        from vllm_mlx.ssd_cache import CacheListSerializer
+
+        ser = CacheListSerializer()
+        path = str(tmp_path / "layer_0.safetensors")
+        with pytest.raises(ValueError):
+            snap = ser.snapshot_layer(self._cache_list(KVCache()))
+            ser.serialize_layer(snap, 0, path)
+        assert not os.path.exists(path)

@@ -64,8 +64,7 @@ class TestStoreMaterializesOnProducerThread:
 
     def test_cache_list_survives_numpy_on_another_thread(self):
         """GLM-5.2 DSA shape: CacheList layers, no KVCache trim path at all."""
-        result = _run_subprocess(
-            """
+        result = _run_subprocess("""
             from mlx_lm.models.cache import CacheList
 
             cache_obj = MemoryAwarePrefixCache(
@@ -88,8 +87,7 @@ class TestStoreMaterializesOnProducerThread:
                     assert np.array(inner.keys).sum() > 0
                     assert np.array(inner.values).sum() > 0
             print("SURVIVED")
-            """
-        )
+            """)
         assert result.returncode == 0, (
             f"exit={result.returncode} (134 == SIGABRT)\n"
             f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -98,8 +96,7 @@ class TestStoreMaterializesOnProducerThread:
 
     def test_quantized_cache_survives_numpy_on_another_thread(self):
         """`_quantize_cache` builds fresh lazy arrays AFTER the trim step."""
-        result = _run_subprocess(
-            """
+        result = _run_subprocess("""
             cache_obj = MemoryAwarePrefixCache(
                 model=object(),
                 config=MemoryCacheConfig(
@@ -123,8 +120,7 @@ class TestStoreMaterializesOnProducerThread:
                 for part in (*layer.keys, *layer.values):
                     np.array(part)
             print("SURVIVED")
-            """
-        )
+            """)
         assert result.returncode == 0, (
             f"exit={result.returncode} (134 == SIGABRT)\n"
             f"stdout={result.stdout}\nstderr={result.stderr}"

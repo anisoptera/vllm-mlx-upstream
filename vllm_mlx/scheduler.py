@@ -3715,9 +3715,7 @@ class Scheduler:
                     result.append(_mk_kv(ld))
                 elif "cachelist_subs" in ld:
                     # DSA CacheList: rebuild each KVCache sub and re-wrap.
-                    result.append(
-                        CacheList(*[_mk_kv(s) for s in ld["cachelist_subs"]])
-                    )
+                    result.append(CacheList(*[_mk_kv(s) for s in ld["cachelist_subs"]]))
                 elif "state" in ld:
                     state_arrays = [mx.array(a) for a in ld["state"]]
                     state_dtypes = ld.get("state_original_dtypes")
