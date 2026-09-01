@@ -40,6 +40,7 @@ The server provides:
 import argparse
 import asyncio
 import copy
+import hashlib
 from dataclasses import dataclass
 import json
 import logging
@@ -1175,6 +1176,35 @@ _IMPLICIT_THINKING_CACHE_MAX_SIZE: int = 256
 _implicit_thinking_cache: dict[tuple, bool] = {}
 
 
+def _template_signature(engine: BaseEngine) -> str | None:
+    """Stable identity for the chat template the engine will render with.
+
+    ``model_name`` is only a proxy for the template: a local override, a
+    re-pull, or a swapped tokenizer changes what ``<think>`` behaviour the
+    template has while the name stays put, and a verdict cached under the name
+    would outlive the template that produced it.
+
+    Both the processor's and the tokenizer's templates are hashed, rather than
+    re-deriving which one ``_apply_chat_template`` will actually pick. That
+    selection is engine-private (``_is_mllm`` and processor capability), and a
+    copy of it here is a second place to drift. Hashing both can only cost a
+    spurious re-probe if the unused one changes; missing a change would cost a
+    stale verdict, which is the bug this guards.
+
+    Returns ``None`` when no template is reachable -- the caller must then skip
+    the cache entirely, since there is nothing to invalidate against.
+    """
+    sources = []
+    for attr in ("_processor", "tokenizer"):
+        template = getattr(getattr(engine, attr, None), "chat_template", None)
+        if template is not None:
+            sources.append(f"{attr}={template!r}")
+    if not sources:
+        return None
+    joined = "\x00".join(sources).encode("utf-8", "surrogatepass")
+    return hashlib.sha256(joined).hexdigest()
+
+
 def _tool_signature(tools: list | None) -> tuple[str, ...] | None:
     """Stable, low-cardinality identity for a request's tool set.
 
@@ -1212,6 +1242,12 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     schema a client happens to send. A template that opened ``<think>`` based
     on a tool's *parameters* rather than its name would still be misread.
 
+    The key carries a hash of the chat template itself, not just the model
+    name: two engines can share a name and render differently, and the same
+    engine's template can be swapped underneath it. See ``_template_signature``.
+    A template that cannot be identified is probed every time rather than
+    cached under an identity that could go stale.
+
     ``enable_thinking`` is forwarded and keyed on because it is resolved
     per-request: ``_apply_forced_tool_choice`` sets it to ``False`` on
     ``chat_kwargs`` directly, not inside ``chat_template_kwargs``. Probing
@@ -1227,15 +1263,18 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
     # False -- forward only what the request actually resolved.
     enable_thinking = (chat_kwargs or {}).get("enable_thinking")
     tools = (chat_kwargs or {}).get("tools") or None
+    template_sig = _template_signature(engine)
     key = (
         getattr(engine, "model_name", None),
+        template_sig,
         repr(sorted(ctk.items())),
         enable_thinking,
         _tool_signature(tools),
     )
-    cached = _implicit_thinking_cache.get(key)
-    if cached is not None:
-        return cached
+    if template_sig is not None:
+        cached = _implicit_thinking_cache.get(key)
+        if cached is not None:
+            return cached
 
     probe_kwargs: dict[str, object] = {"chat_template_kwargs": dict(ctk) or None}
     if enable_thinking is not None:
@@ -1252,6 +1291,8 @@ def _detect_implicit_thinking(engine: BaseEngine, chat_kwargs: dict | None) -> b
         return False
 
     result = bool(prompt) and prompt.rstrip().endswith("<think>")
+    if template_sig is None:
+        return result
     _implicit_thinking_cache[key] = result
     while len(_implicit_thinking_cache) > _IMPLICIT_THINKING_CACHE_MAX_SIZE:
         _implicit_thinking_cache.pop(next(iter(_implicit_thinking_cache)))

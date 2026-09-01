@@ -5276,13 +5276,28 @@ def pytest_addoption(parser):
 class TestDetectImplicitThinking:
     """The probe that tells the streaming parser a <think> was injected."""
 
+    class _Tokenizer:
+        """Stands in for the HF tokenizer the probe reads its template from.
+
+        Real engines always expose one (verified on GLM-5.3: a 10.6KB
+        ``chat_template`` string on both tokenizer and processor), so the
+        default harness must too -- otherwise every test here would silently
+        exercise the uncacheable path. See ``_NoTemplateEngine`` for that case.
+        """
+
+        def __init__(self, chat_template="{{ messages }}<|assistant|><think>"):
+            self.chat_template = chat_template
+
     class _Engine:
         model_name = "glm-5.3-flash"
 
-        def __init__(self, rendered):
+        def __init__(self, rendered, chat_template=None):
             self._rendered = rendered
             self.calls = 0
             self.seen_kwargs = []
+            self.tokenizer = TestDetectImplicitThinking._Tokenizer(
+                *([chat_template] if chat_template is not None else [])
+            )
 
         def _apply_chat_template(self, messages, **kwargs):
             self.calls += 1
@@ -5531,4 +5546,91 @@ class TestDetectImplicitThinking:
         server._implicit_thinking_cache.clear()
         engine = self._Engine("<|assistant|>\n<think>")
         assert server._detect_implicit_thinking(engine, {"tools": ["nonsense", None]})
+        server._implicit_thinking_cache.clear()
+
+    # --- template identity --------------------------------------------------
+    #
+    # model_name is only a proxy for the template. Two engines can share a
+    # name and render differently (a local override, a re-pull, a swapped
+    # tokenizer), and the cached verdict would follow the name, not the
+    # template that actually produced it.
+
+    class _NoTemplateEngine:
+        """An engine whose template can't be identified (no tokenizer)."""
+
+        model_name = "opaque"
+
+        def __init__(self, rendered):
+            self._rendered = rendered
+            self.calls = 0
+
+        def _apply_chat_template(self, messages, **kwargs):
+            self.calls += 1
+            return self._rendered
+
+    def test_changed_template_cannot_reuse_the_previous_verdict(self):
+        """The reviewer's regression: same engine, template swapped underneath."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>", chat_template="TEMPLATE A")
+        assert server._detect_implicit_thinking(engine, None) is True
+
+        # Swap in a template that does NOT open <think>.
+        engine.tokenizer.chat_template = "TEMPLATE B"
+        engine._rendered = "<|assistant|>\n"
+        assert server._detect_implicit_thinking(engine, None) is False
+        assert engine.calls == 2, "changed template must force a re-probe"
+        server._implicit_thinking_cache.clear()
+
+    def test_same_model_name_different_templates_do_not_collide(self):
+        """Two engines, one model_name, different templates -> two verdicts."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        implicit = self._Engine("<|assistant|>\n<think>", chat_template="A")
+        explicit = self._Engine("<|assistant|>\n", chat_template="B")
+        assert implicit.model_name == explicit.model_name
+        assert server._detect_implicit_thinking(implicit, None) is True
+        assert server._detect_implicit_thinking(explicit, None) is False
+        assert explicit.calls == 1, "second engine must probe, not reuse"
+        server._implicit_thinking_cache.clear()
+
+    def test_identical_template_still_shares_one_entry(self):
+        """The signature must not defeat caching for the common case."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        first = self._Engine("<|assistant|>\n<think>", chat_template="SAME")
+        second = self._Engine("<|assistant|>\n<think>", chat_template="SAME")
+        assert server._detect_implicit_thinking(first, None) is True
+        assert server._detect_implicit_thinking(second, None) is True
+        assert second.calls == 0, "identical template should hit the cache"
+        server._implicit_thinking_cache.clear()
+
+    def test_processor_template_is_part_of_the_identity(self):
+        """MLLM engines render via the processor, so its template counts too."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._Engine("<|assistant|>\n<think>", chat_template="SHARED")
+        engine._processor = self._Tokenizer("PROCESSOR A")
+        assert server._detect_implicit_thinking(engine, None) is True
+
+        engine._processor.chat_template = "PROCESSOR B"
+        engine._rendered = "<|assistant|>\n"
+        assert server._detect_implicit_thinking(engine, None) is False
+        assert engine.calls == 2
+        server._implicit_thinking_cache.clear()
+
+    def test_unidentifiable_template_is_probed_every_time(self):
+        """No signature means no way to invalidate -- so cache nothing."""
+        import vllm_mlx.server as server
+
+        server._implicit_thinking_cache.clear()
+        engine = self._NoTemplateEngine("<|assistant|>\n<think>")
+        assert server._detect_implicit_thinking(engine, None) is True
+        assert server._detect_implicit_thinking(engine, None) is True
+        assert engine.calls == 2, "unidentifiable template must not be cached"
+        assert server._implicit_thinking_cache == {}
         server._implicit_thinking_cache.clear()
